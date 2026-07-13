@@ -1,0 +1,43 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { reconstitution } from "../label/peptide";
+import type { PeptideLabelInput } from "../label/schema";
+import { LabelPreview } from "./LabelPreview";
+
+const base: PeptideLabelInput = {
+  peptideName: "BPC-157",
+  vialMg: 5,
+  bacWaterMl: 2,
+  doseMcg: 250,
+  lot: "A1",
+  dateReconstituted: "2026-07-12",
+  note: "",
+};
+
+describe("LabelPreview", () => {
+  it("renders the peptide, amount, and computed dosing", () => {
+    render(<LabelPreview label={base} recon={reconstitution(base)} />);
+
+    expect(screen.getByText("BPC-157")).toBeInTheDocument();
+    expect(screen.getByText("5 mg")).toBeInTheDocument();
+    expect(screen.getByText("250 mcg/dose")).toBeInTheDocument();
+    expect(screen.getByText("10 IU")).toBeInTheDocument();
+    expect(screen.getByText("2.5 mg/mL")).toBeInTheDocument();
+    expect(screen.getByText("2 mL BAC")).toBeInTheDocument();
+    expect(screen.getByText("~20 doses")).toBeInTheDocument();
+    expect(screen.getByText("2026-07-12 · A1")).toBeInTheDocument();
+  });
+
+  it("shows dashes when dosing cannot be computed", () => {
+    const invalid = { ...base, vialMg: Number.NaN };
+    render(<LabelPreview label={invalid} recon={null} />);
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("sizes the label to 40mm (~151px at 96dpi)", () => {
+    render(<LabelPreview label={base} recon={reconstitution(base)} />);
+    const el = screen.getByLabelText("Label preview") as HTMLElement;
+    expect(Number.parseFloat(el.style.width)).toBeCloseTo(151.18, 1);
+    expect(Number.parseFloat(el.style.height)).toBeCloseTo(52.91, 1);
+  });
+});

@@ -1,0 +1,199 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  color: #1a1a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 2rem;
+  padding: 2rem;
+  min-height: 100vh;
+}
+
+.editor h1 {
+  margin: 0;
+  font-size: 1.4rem;
+}
+
+.subtitle {
+  margin: 0.25rem 0 1rem;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.label-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.label-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.label-form .row3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.label-form .row2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.label-form input,
+.label-form select {
+  font: inherit;
+  padding: 0.35rem 0.45rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-weight: 400;
+}
+
+.label-form .photo {
+  padding: 0.5rem;
+  border: 1px dashed #bbb;
+  border-radius: 4px;
+  background: #fafafa;
+}
+
+.status {
+  color: #555;
+  font-style: italic;
+}
+
+.error {
+  color: #b00020;
+  margin: 0.25rem 0;
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  background: #1a73e8;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+button:disabled {
+  background: #9ab;
+  cursor: not-allowed;
+}
+
+.stage {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3rem;
+  background: #f4f4f4;
+  border-radius: 8px;
+}
+
+/* Screen-only zoom so the tiny label is legible; removed for print. */
+.preview-frame {
+  transform: scale(3.5);
+  transform-origin: top center;
+}
+
+/* The physical label: exactly 40mm x 14mm, black-on-white for direct thermal. */
+.label-print {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.3mm;
+  padding: 0.7mm 1mm;
+  background: #fff;
+  color: #000;
+  border: 1px dashed #bbb; /* cut guide, screen only */
+  overflow: hidden;
+  font-family: "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  line-height: 1.02;
+}
+
+.label-print .row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1mm;
+  white-space: nowrap;
+}
+
+.r-head .name {
+  font-weight: 700;
+  font-size: 7.5pt;
+}
+
+.r-head .amount {
+  font-weight: 700;
+  font-size: 7pt;
+}
+
+.r-dose {
+  font-weight: 700;
+  font-size: 7pt;
+}
+
+.r-dose .units {
+  padding: 0 0.6mm;
+  border: 0.2mm solid #000;
+  border-radius: 0.6mm;
+}
+
+.r-conc {
+  font-size: 5.8pt;
+}
+
+.r-meta {
+  font-size: 5pt;
+}
+
+.r-note {
+  font-size: 5pt;
+  font-style: italic;
+}
+
+@media print {
+  @page {
+    size: 40mm 14mm;
+    margin: 0;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .app {
+    display: block;
+    padding: 0;
+  }
+
+  .stage {
+    background: none;
+    padding: 0;
+  }
+
+  .preview-frame {
+    transform: none;
+  }
+
+  .label-print {
+    border: none;
+  }
+}
