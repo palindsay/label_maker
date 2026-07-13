@@ -31,6 +31,8 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
 export interface ModelInfo {
   id: string;
   name?: string;
+  /** True when the endpoint explicitly advertises image support. */
+  vision?: boolean;
 }
 
 /**
@@ -207,7 +209,16 @@ function authHeaders(config: LlmConfig): Record<string, string> {
 }
 
 const modelsResponseSchema = z.object({
-  data: z.array(z.object({ id: z.string(), name: z.string().optional() })).min(1),
+  data: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string().optional(),
+        // Some endpoints (e.g. llama-swap) advertise per-model capabilities.
+        capabilities: z.object({ vision: z.boolean() }).partial().optional(),
+      }),
+    )
+    .min(1),
 });
 
 /**
@@ -246,9 +257,12 @@ export async function listModels(
     );
   }
 
-  return parsed.data.data.map((m) =>
-    m.name === undefined ? { id: m.id } : { id: m.id, name: m.name },
-  );
+  return parsed.data.data.map((m) => {
+    const info: ModelInfo = { id: m.id };
+    if (m.name !== undefined) info.name = m.name;
+    if (m.capabilities?.vision !== undefined) info.vision = m.capabilities.vision;
+    return info;
+  });
 }
 
 // Substrings that hint a model can accept images. Best-effort only: endpoints
@@ -276,8 +290,9 @@ function looksLikeVision(model: ModelInfo): boolean {
 /**
  * Choose which discovered model to use for image extraction:
  *   1. `preferred` if the endpoint serves it,
- *   2. otherwise the first model whose name looks vision-capable,
- *   3. otherwise the first model available.
+ *   2. otherwise the first model the endpoint flags `vision: true`,
+ *   3. otherwise the first model whose name looks vision-capable,
+ *   4. otherwise the first model available.
  * Returns `undefined` only when the list is empty.
  */
 export function pickVisionModel(models: ModelInfo[], preferred?: string): string | undefined {
@@ -286,8 +301,10 @@ export function pickVisionModel(models: ModelInfo[], preferred?: string): string
     const exact = models.find((m) => m.id === preferred);
     if (exact) return exact.id;
   }
-  const vision = models.find(looksLikeVision);
-  return (vision ?? models[0])?.id;
+  const flagged = models.find((m) => m.vision === true);
+  if (flagged) return flagged.id;
+  const named = models.find(looksLikeVision);
+  return (named ?? models[0])?.id;
 }
 
 /**

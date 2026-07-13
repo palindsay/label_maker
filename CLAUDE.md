@@ -85,12 +85,14 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   (not via the proxy) requires CORS on that server.
 - **Model discovery is dynamic.** The endpoint's roster changes (it may serve Gemma 4 31B, a
   Qwen VL, LLaVA, …), so the app does not hardcode a model id. On mount it calls `listModels`
-  (`GET /v1/models`) and `pickVisionModel` chooses one: a `VITE_LLM_MODEL` preference if the
-  endpoint serves it, else the first model whose name looks vision-capable (`VISION_HINTS`),
-  else the first model. The **in-app "Vision model" dropdown** lets the user switch among
-  discovered models, and `extractPeptideFromImage` auto-discovers when `config.model` is empty.
-  Metadata rarely advertises vision, so `pickVisionModel` only *ranks* — the user override is the
-  safety net. `VITE_LLM_MODEL` is optional (leave unset to auto-pick).
+  (`GET /v1/models`) and `pickVisionModel` chooses one, in priority order: (1) a `VITE_LLM_MODEL`
+  preference if the endpoint serves it, (2) the first model the endpoint flags
+  `capabilities.vision: true`, (3) the first model whose name looks vision-capable
+  (`VISION_HINTS`), (4) the first model. The **in-app "Vision model" dropdown** lets the user
+  switch among discovered models, and `extractPeptideFromImage` auto-discovers when
+  `config.model` is empty. The capability flag is authoritative when present; the name heuristic
+  is the fallback when it isn't, and the user override is the final safety net. `VITE_LLM_MODEL`
+  is optional (leave unset to auto-pick).
 - Endpoints seen in practice: **llama-swap** (routes by `model` id; unknown id → `404 "no router"`)
   and a plain server exposing a single Qwen build that *does* accept images. A text-only model
   with no mmproj returns `500 "image input is not supported"` → the app's `no-vision` path.

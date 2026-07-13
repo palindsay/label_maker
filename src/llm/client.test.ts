@@ -68,7 +68,13 @@ describe("pickVisionModel", () => {
     expect(pickVisionModel(models, "gpt-4o")).toBe("gemma-4-31b");
   });
 
-  it("prefers a vision-looking model over the first when none is preferred", () => {
+  it("prefers a model the endpoint flags vision-capable over name heuristics", () => {
+    // "gemma" matches the name heuristic, but the flag on the plain id wins.
+    const ms = [{ id: "gemma-text-only" }, { id: "plain-27b", vision: true }];
+    expect(pickVisionModel(ms)).toBe("plain-27b");
+  });
+
+  it("prefers a vision-looking model over the first when no flag is present", () => {
     expect(pickVisionModel([{ id: "text-7b" }, { id: "qwen2.5-vl-7b" }])).toBe("qwen2.5-vl-7b");
   });
 
@@ -78,14 +84,16 @@ describe("pickVisionModel", () => {
 });
 
 describe("listModels", () => {
-  it("returns discovered model ids and names from GET /models", async () => {
+  it("returns discovered ids, names, and vision capability from GET /models", async () => {
     const fetchFn = vi.fn(async () =>
-      Response.json({ data: [{ id: "a" }, { id: "b", name: "B" }] }),
+      Response.json({
+        data: [{ id: "a" }, { id: "b", name: "B", capabilities: { vision: true } }],
+      }),
     );
 
     const models = await listModels(CFG, fetchFn);
 
-    expect(models).toEqual([{ id: "a" }, { id: "b", name: "B" }]);
+    expect(models).toEqual([{ id: "a" }, { id: "b", name: "B", vision: true }]);
     const [url] = fetchFn.mock.calls[0] as unknown as [string];
     expect(url).toBe("/v1/models");
   });
