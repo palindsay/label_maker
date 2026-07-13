@@ -3,7 +3,9 @@ import {
   LlmError,
   buildVisionRequest,
   extractPeptideFromImage,
+  listModels,
   parseExtractionContent,
+  pickVisionModel,
 } from "./client";
 
 const IMG = "data:image/png;base64,AAAA";
@@ -50,6 +52,61 @@ describe("parseExtractionContent", () => {
   });
 });
 
+describe("pickVisionModel", () => {
+  const models = [{ id: "gemma-4-31b" }, { id: "qwen3.6-27b" }, { id: "llava-1.6-13b" }];
+
+  it("returns undefined for an empty list", () => {
+    expect(pickVisionModel([], "anything")).toBeUndefined();
+  });
+
+  it("honours a preferred id when the endpoint serves it", () => {
+    expect(pickVisionModel(models, "qwen3.6-27b")).toBe("qwen3.6-27b");
+  });
+
+  it("ignores a preferred id the endpoint does not serve", () => {
+    // preferred absent -> falls through to heuristic (gemma looks like vision)
+    expect(pickVisionModel(models, "gpt-4o")).toBe("gemma-4-31b");
+  });
+
+  it("prefers a vision-looking model over the first when none is preferred", () => {
+    expect(pickVisionModel([{ id: "text-7b" }, { id: "qwen2.5-vl-7b" }])).toBe("qwen2.5-vl-7b");
+  });
+
+  it("falls back to the first model when none look like vision", () => {
+    expect(pickVisionModel([{ id: "mystery-a" }, { id: "mystery-b" }])).toBe("mystery-a");
+  });
+});
+
+describe("listModels", () => {
+  it("returns discovered model ids and names from GET /models", async () => {
+    const fetchFn = vi.fn(async () =>
+      Response.json({ data: [{ id: "a" }, { id: "b", name: "B" }] }),
+    );
+
+    const models = await listModels(CFG, fetchFn);
+
+    expect(models).toEqual([{ id: "a" }, { id: "b", name: "B" }]);
+    const [url] = fetchFn.mock.calls[0] as unknown as [string];
+    expect(url).toBe("/v1/models");
+  });
+
+  it("throws 'unreachable' on a network failure", async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error("down");
+    });
+    const error = await listModels(CFG, fetchFn).catch((e) => e);
+    expect(error).toBeInstanceOf(LlmError);
+    expect(error.kind).toBe("unreachable");
+  });
+
+  it("throws 'bad-response' on an unexpected shape", async () => {
+    const fetchFn = vi.fn(async () => Response.json({ nope: true }));
+    const error = await listModels(CFG, fetchFn).catch((e) => e);
+    expect(error).toBeInstanceOf(LlmError);
+    expect(error.kind).toBe("bad-response");
+  });
+});
+
 describe("extractPeptideFromImage", () => {
   it("POSTs to the chat-completions endpoint and returns parsed fields", async () => {
     const fetchFn = vi.fn(async () =>
@@ -64,6 +121,24 @@ describe("extractPeptideFromImage", () => {
     const [url, init] = fetchFn.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/v1/chat/completions");
     expect(init.method).toBe("POST");
+  });
+
+  it("discovers a model from /models when none is configured", async () => {
+    const fetchFn = vi.fn(async (url: string | URL | Request, _init?: RequestInit) => {
+      if (String(url).endsWith("/models")) {
+        return Response.json({ data: [{ id: "qwen2.5-vl-7b" }] });
+      }
+      return Response.json({ choices: [{ message: { content: '{"peptideName":"X"}' } }] });
+    });
+
+    const result = await extractPeptideFromImage(IMG, { baseUrl: "/v1", model: "" }, fetchFn);
+
+    expect(result).toEqual({ peptideName: "X" });
+    expect(String(fetchFn.mock.calls[0]?.[0])).toContain("/models");
+    // the resolved id is sent in the chat request
+    const chatInit = fetchFn.mock.calls[1]?.[1] as unknown as RequestInit;
+    const chatBody = JSON.parse(chatInit.body as string);
+    expect(chatBody.model).toBe("qwen2.5-vl-7b");
   });
 
   it("classifies a missing multimodal model as a 'no-vision' failure", async () => {

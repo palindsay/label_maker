@@ -81,14 +81,19 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
 - Browser calls same-origin **`/v1`**; Vite (`server.proxy` + `preview.proxy` in
   `vite.config.ts`) forwards to `LLM_TARGET` (default `http://rastalinuxai.local:8080`). This
   sidesteps CORS. Change the target by editing `LLM_TARGET` in `vite.config.ts`.
-- Override the base URL/model at runtime with `VITE_LLM_BASE_URL` / `VITE_LLM_MODEL` (see
-  `.env.example`). Calling a host directly (not via the proxy) requires CORS on that server.
-- The target endpoint is **llama-swap** (a model-swapping proxy). It routes by the `model` id:
-  an unknown id returns `404 "no router for requested model"`, so `VITE_LLM_MODEL` must be a
-  real id from `GET /v1/models`. Photo auto-fill additionally needs a **vision** model (one
-  with an mmproj loaded); text-only models return `500 "image input is not supported"`. As of
-  writing the endpoint serves text-only models (Gemma 4, Qwen 3.6) — image extraction is
-  blocked until a vision-language model is added to the llama-swap config.
+- Override the base URL with `VITE_LLM_BASE_URL` (see `.env.example`). Calling a host directly
+  (not via the proxy) requires CORS on that server.
+- **Model discovery is dynamic.** The endpoint's roster changes (it may serve Gemma 4 31B, a
+  Qwen VL, LLaVA, …), so the app does not hardcode a model id. On mount it calls `listModels`
+  (`GET /v1/models`) and `pickVisionModel` chooses one: a `VITE_LLM_MODEL` preference if the
+  endpoint serves it, else the first model whose name looks vision-capable (`VISION_HINTS`),
+  else the first model. The **in-app "Vision model" dropdown** lets the user switch among
+  discovered models, and `extractPeptideFromImage` auto-discovers when `config.model` is empty.
+  Metadata rarely advertises vision, so `pickVisionModel` only *ranks* — the user override is the
+  safety net. `VITE_LLM_MODEL` is optional (leave unset to auto-pick).
+- Endpoints seen in practice: **llama-swap** (routes by `model` id; unknown id → `404 "no router"`)
+  and a plain server exposing a single Qwen build that *does* accept images. A text-only model
+  with no mmproj returns `500 "image input is not supported"` → the app's `no-vision` path.
 - The app **assumes a multimodal model is available** and always offers photo auto-fill. When
   the endpoint can't do vision (no model, no mmproj, unreachable, or a bad response),
   `extractPeptideFromImage` throws a typed `LlmError` (`kind`: `no-vision` | `model-missing` |

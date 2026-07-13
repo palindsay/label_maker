@@ -21,10 +21,17 @@ const env = import.meta.env;
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: env.VITE_LLM_BASE_URL ?? "/v1",
-  // Must be a real, vision-capable model id served by the endpoint
-  // (see `GET /v1/models`). Override with VITE_LLM_MODEL.
-  model: env.VITE_LLM_MODEL ?? "gemma-4-31b",
+  // Empty means "auto-discover": the endpoint's model roster changes, so rather
+  // than hardcode an id we list `GET /v1/models` and pick one at runtime. Set
+  // VITE_LLM_MODEL to force a specific id (used as a preference if present).
+  model: env.VITE_LLM_MODEL ?? "",
 };
+
+/** A model served by the endpoint (from `GET /v1/models`). */
+export interface ModelInfo {
+  id: string;
+  name?: string;
+}
 
 /**
  * Why image auto-fill failed. The app assumes a multimodal model is available
@@ -193,10 +200,122 @@ function classifyHttpError(status: number, body: string): LlmError {
   );
 }
 
+function authHeaders(config: LlmConfig): Record<string, string> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  return headers;
+}
+
+const modelsResponseSchema = z.object({
+  data: z.array(z.object({ id: z.string(), name: z.string().optional() })).min(1),
+});
+
 /**
- * Send a vial image to the vision model and return whatever peptide fields it
+ * Discover the models the endpoint currently serves. The roster is not fixed
+ * (it may be Gemma 4 31B, a Qwen VL, LLaVA, …), so callers list at runtime
+ * rather than assuming an id.
+ *
+ * @throws {LlmError} `unreachable` / non-OK status / `bad-response`.
+ */
+export async function listModels(
+  config: LlmConfig = DEFAULT_LLM_CONFIG,
+  fetchImpl: typeof fetch = fetch,
+): Promise<ModelInfo[]> {
+  let response: Response;
+  try {
+    response = await fetchImpl(`${config.baseUrl}/models`, { headers: authHeaders(config) });
+  } catch (err) {
+    throw new LlmError(
+      "unreachable",
+      "Could not reach the inference endpoint to list its models.",
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw classifyHttpError(response.status, detail);
+  }
+
+  const parsed = modelsResponseSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) {
+    throw new LlmError(
+      "bad-response",
+      "The inference endpoint returned an unexpected model list.",
+      parsed.error.message,
+    );
+  }
+
+  return parsed.data.data.map((m) =>
+    m.name === undefined ? { id: m.id } : { id: m.id, name: m.name },
+  );
+}
+
+// Substrings that hint a model can accept images. Best-effort only: endpoints
+// rarely advertise vision in metadata, and some models (e.g. this Qwen build)
+// are multimodal despite a text-sounding name — so this only *ranks* the auto
+// pick; the user can always override with a different discovered model.
+const VISION_HINTS = [
+  "vl",
+  "vision",
+  "gemma",
+  "llava",
+  "internvl",
+  "pixtral",
+  "moondream",
+  "smolvlm",
+  "minicpm-v",
+  "minicpm-o",
+];
+
+function looksLikeVision(model: ModelInfo): boolean {
+  const s = `${model.id} ${model.name ?? ""}`.toLowerCase();
+  return VISION_HINTS.some((hint) => s.includes(hint));
+}
+
+/**
+ * Choose which discovered model to use for image extraction:
+ *   1. `preferred` if the endpoint serves it,
+ *   2. otherwise the first model whose name looks vision-capable,
+ *   3. otherwise the first model available.
+ * Returns `undefined` only when the list is empty.
+ */
+export function pickVisionModel(models: ModelInfo[], preferred?: string): string | undefined {
+  if (models.length === 0) return undefined;
+  if (preferred) {
+    const exact = models.find((m) => m.id === preferred);
+    if (exact) return exact.id;
+  }
+  const vision = models.find(looksLikeVision);
+  return (vision ?? models[0])?.id;
+}
+
+/**
+ * Resolve a concrete model id, discovering the roster when `config.model` is
+ * empty ("auto").
+ *
+ * @throws {LlmError} If discovery fails or the endpoint serves no models.
+ */
+export async function resolveVisionModel(
+  config: LlmConfig = DEFAULT_LLM_CONFIG,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const models = await listModels(config, fetchImpl);
+  const picked = pickVisionModel(models, config.model || undefined);
+  if (!picked) {
+    throw new LlmError(
+      "model-missing",
+      "The inference endpoint is not serving any models. Enter the label details manually.",
+    );
+  }
+  return picked;
+}
+
+/**
+ * Send a vial image to a vision model and return whatever peptide fields it
  * could read. `fetchImpl` is injectable for testing.
  *
+ * If `config.model` is empty it auto-discovers a model from the endpoint.
  * Assumes a multimodal model is available; when it is not (or the endpoint is
  * unreachable / misbehaving) it throws a typed {@link LlmError} whose `message`
  * is safe to show the user, so callers can degrade to manual entry.
@@ -208,15 +327,16 @@ export async function extractPeptideFromImage(
   config: LlmConfig = DEFAULT_LLM_CONFIG,
   fetchImpl: typeof fetch = fetch,
 ): Promise<ExtractedPeptide> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
+  const model = config.model || (await resolveVisionModel(config, fetchImpl));
+  const requestConfig: LlmConfig = model === config.model ? config : { ...config, model };
+  const headers = authHeaders(requestConfig);
 
   let response: Response;
   try {
-    response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
+    response = await fetchImpl(`${requestConfig.baseUrl}/chat/completions`, {
       method: "POST",
       headers,
-      body: JSON.stringify(buildVisionRequest(imageDataUrl, config)),
+      body: JSON.stringify(buildVisionRequest(imageDataUrl, requestConfig)),
     });
   } catch (err) {
     throw new LlmError(

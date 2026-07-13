@@ -15,7 +15,13 @@
  */
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { LlmError, extractPeptideFromImage } from "./client";
+import {
+  LlmError,
+  type ModelInfo,
+  extractPeptideFromImage,
+  listModels,
+  pickVisionModel,
+} from "./client";
 
 const LIVE = process.env.LLM_LIVE === "1";
 const BASE_URL = process.env.LLM_BASE_URL ?? "http://rastalinuxai.local:8080/v1";
@@ -34,26 +40,17 @@ function imageDataUrl(): string {
   return `data:${mime};base64,${readFileSync(path).toString("base64")}`;
 }
 
-interface ModelsResponse {
-  data?: Array<{ id: string }>;
-}
-
 describe.runIf(LIVE)("live endpoint", () => {
-  let modelIds: string[] = [];
+  const config = { baseUrl: BASE_URL, model: MODEL ?? "" };
+  let models: ModelInfo[] = [];
   let reachError: string | null = null;
 
   beforeAll(async () => {
-    // Tolerate an unreachable endpoint here so a single test reports it cleanly
-    // instead of the whole suite crashing in a hook.
+    // Exercise the real discovery path. Tolerate an unreachable endpoint here so
+    // a single test reports it cleanly instead of the whole suite crashing.
     try {
-      const res = await fetch(`${BASE_URL}/models`);
-      if (!res.ok) {
-        reachError = `GET /models returned ${res.status}`;
-        return;
-      }
-      const body = (await res.json()) as ModelsResponse;
-      modelIds = (body.data ?? []).map((m) => m.id);
-      console.log(`[live] ${modelIds.length} models: ${modelIds.join(", ")}`);
+      models = await listModels(config);
+      console.log(`[live] ${models.length} models: ${models.map((m) => m.id).join(", ")}`);
     } catch (err) {
       reachError = err instanceof Error ? err.message : String(err);
     }
@@ -61,11 +58,11 @@ describe.runIf(LIVE)("live endpoint", () => {
 
   it("is reachable and lists at least one model", () => {
     expect(reachError, `endpoint ${BASE_URL} unreachable: ${reachError}`).toBeNull();
-    expect(modelIds.length).toBeGreaterThan(0);
+    expect(models.length).toBeGreaterThan(0);
   });
 
   it("completes a text chat request", async () => {
-    const model = MODEL ?? modelIds[0];
+    const model = MODEL ?? pickVisionModel(models);
     expect(model, "no model available to test").toBeDefined();
 
     const res = await fetch(`${BASE_URL}/chat/completions`, {
@@ -80,18 +77,14 @@ describe.runIf(LIVE)("live endpoint", () => {
     expect(res.ok, `chat failed: ${res.status} ${await res.clone().text()}`).toBe(true);
   }, 60_000);
 
-  // Assume a multimodal model is available and attempt real extraction; if the
-  // endpoint has no vision model (or the id is missing), degrade gracefully —
-  // exactly as the app does — rather than hard-failing.
+  // Assume a multimodal model is available and attempt real extraction (the
+  // client auto-discovers a model from config.model=""). If the endpoint has no
+  // vision model, degrade gracefully — exactly as the app does.
   it("extracts fields from an image, or degrades gracefully without a vision model", async () => {
-    const model = MODEL ?? modelIds[0];
-    expect(model, "no model available to test").toBeDefined();
+    console.log(`[live] auto-picked model: ${pickVisionModel(models) ?? "(none)"}`);
 
     try {
-      const fields = await extractPeptideFromImage(imageDataUrl(), {
-        baseUrl: BASE_URL,
-        model: model as string,
-      });
+      const fields = await extractPeptideFromImage(imageDataUrl(), config);
       console.log("[live] extracted:", JSON.stringify(fields));
       expect(fields).toBeTypeOf("object");
     } catch (err) {
