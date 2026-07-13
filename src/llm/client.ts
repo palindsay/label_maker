@@ -21,7 +21,9 @@ const env = import.meta.env;
 
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
   baseUrl: env.VITE_LLM_BASE_URL ?? "/v1",
-  model: env.VITE_LLM_MODEL ?? "local-vlm",
+  // Must be a real, vision-capable model id served by the endpoint
+  // (see `GET /v1/models`). Override with VITE_LLM_MODEL.
+  model: env.VITE_LLM_MODEL ?? "gemma-4-31b",
 };
 
 /** Fields we attempt to read from an image; all optional. */
@@ -151,7 +153,11 @@ export async function extractPeptideFromImage(
   });
 
   if (!response.ok) {
-    throw new Error(`LLM request failed with status ${response.status}`);
+    // Surface the server's error body — e.g. llama-swap's "no router for
+    // requested model", or "image input is not supported ... provide mmproj".
+    const detail = await response.text().catch(() => "");
+    const suffix = detail ? `: ${detail.slice(0, 200)}` : "";
+    throw new Error(`LLM request failed (status ${response.status})${suffix}`);
   }
 
   const json = chatResponseSchema.parse(await response.json());

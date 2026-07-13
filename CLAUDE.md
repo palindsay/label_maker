@@ -83,6 +83,15 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   sidesteps CORS. Change the target by editing `LLM_TARGET` in `vite.config.ts`.
 - Override the base URL/model at runtime with `VITE_LLM_BASE_URL` / `VITE_LLM_MODEL` (see
   `.env.example`). Calling a host directly (not via the proxy) requires CORS on that server.
+- The target endpoint is **llama-swap** (a model-swapping proxy). It routes by the `model` id:
+  an unknown id returns `404 "no router for requested model"`, so `VITE_LLM_MODEL` must be a
+  real id from `GET /v1/models`. Photo auto-fill additionally needs a **vision** model (one
+  with an mmproj loaded); text-only models return `500 "image input is not supported"`. As of
+  writing the endpoint serves text-only models (Gemma 4, Qwen 3.6) — image extraction is
+  blocked until a vision-language model is added to the llama-swap config.
+- `npm run test:live` (gated by `LLM_LIVE=1`) is the diagnostic: it preflights `/v1/models`,
+  proves a text completion works, and runs image extraction only when `LLM_MODEL` points at a
+  vision model.
 
 ## Conventions
 
