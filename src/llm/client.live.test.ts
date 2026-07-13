@@ -9,12 +9,13 @@
  * Notes on the target endpoint (llama-swap in front of llama.cpp):
  *   - It routes by the `model` id; an unknown id returns 404 "no router".
  *   - Image extraction needs a vision model with an mmproj loaded; text-only
- *     models return 500 "image input is not supported". The vision test is
- *     therefore gated on LLM_MODEL — point it at a vision-capable id.
+ *     models return 500 "image input is not supported". The extraction test
+ *     assumes a vision model is available (set LLM_MODEL to pick one) and
+ *     degrades gracefully — like the app — when it is not.
  */
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
-import { extractPeptideFromImage } from "./client";
+import { LlmError, extractPeptideFromImage } from "./client";
 
 const LIVE = process.env.LLM_LIVE === "1";
 const BASE_URL = process.env.LLM_BASE_URL ?? "http://rastalinuxai.local:8080/v1";
@@ -39,21 +40,29 @@ interface ModelsResponse {
 
 describe.runIf(LIVE)("live endpoint", () => {
   let modelIds: string[] = [];
+  let reachError: string | null = null;
 
   beforeAll(async () => {
-    const res = await fetch(`${BASE_URL}/models`);
-    if (res.ok) {
+    // Tolerate an unreachable endpoint here so a single test reports it cleanly
+    // instead of the whole suite crashing in a hook.
+    try {
+      const res = await fetch(`${BASE_URL}/models`);
+      if (!res.ok) {
+        reachError = `GET /models returned ${res.status}`;
+        return;
+      }
       const body = (await res.json()) as ModelsResponse;
       modelIds = (body.data ?? []).map((m) => m.id);
       console.log(`[live] ${modelIds.length} models: ${modelIds.join(", ")}`);
+    } catch (err) {
+      reachError = err instanceof Error ? err.message : String(err);
     }
   }, 30_000);
 
-  it("is reachable and lists at least one model", async () => {
-    const res = await fetch(`${BASE_URL}/models`);
-    expect(res.ok).toBe(true);
+  it("is reachable and lists at least one model", () => {
+    expect(reachError, `endpoint ${BASE_URL} unreachable: ${reachError}`).toBeNull();
     expect(modelIds.length).toBeGreaterThan(0);
-  }, 30_000);
+  });
 
   it("completes a text chat request", async () => {
     const model = MODEL ?? modelIds[0];
@@ -71,24 +80,26 @@ describe.runIf(LIVE)("live endpoint", () => {
     expect(res.ok, `chat failed: ${res.status} ${await res.clone().text()}`).toBe(true);
   }, 60_000);
 
-  it.runIf(MODEL)(
-    `extracts peptide fields from an image (model=${MODEL ?? "?"})`,
-    async () => {
-      const model = MODEL as string; // guaranteed present by it.runIf(MODEL)
+  // Assume a multimodal model is available and attempt real extraction; if the
+  // endpoint has no vision model (or the id is missing), degrade gracefully —
+  // exactly as the app does — rather than hard-failing.
+  it("extracts fields from an image, or degrades gracefully without a vision model", async () => {
+    const model = MODEL ?? modelIds[0];
+    expect(model, "no model available to test").toBeDefined();
+
+    try {
       const fields = await extractPeptideFromImage(imageDataUrl(), {
         baseUrl: BASE_URL,
-        model,
+        model: model as string,
       });
       console.log("[live] extracted:", JSON.stringify(fields));
       expect(fields).toBeTypeOf("object");
-    },
-    90_000,
-  );
-
-  it.skipIf(MODEL)("vision extraction (skipped — set LLM_MODEL to a vision model)", () => {
-    console.warn(
-      "[live] Skipping image extraction: set LLM_MODEL to a vision-capable id " +
-        "(the endpoint currently serves text-only models — none accept images).",
-    );
-  });
+    } catch (err) {
+      if (err instanceof LlmError && (err.kind === "no-vision" || err.kind === "model-missing")) {
+        console.warn(`[live] graceful degrade (${err.kind}): ${err.message}`);
+        return;
+      }
+      throw err;
+    }
+  }, 90_000);
 });

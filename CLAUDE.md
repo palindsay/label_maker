@@ -89,9 +89,15 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   with an mmproj loaded); text-only models return `500 "image input is not supported"`. As of
   writing the endpoint serves text-only models (Gemma 4, Qwen 3.6) — image extraction is
   blocked until a vision-language model is added to the llama-swap config.
+- The app **assumes a multimodal model is available** and always offers photo auto-fill. When
+  the endpoint can't do vision (no model, no mmproj, unreachable, or a bad response),
+  `extractPeptideFromImage` throws a typed `LlmError` (`kind`: `no-vision` | `model-missing` |
+  `unreachable` | `bad-response` | `unknown`) whose `message` is user-safe, and the UI degrades
+  to manual entry. An empty extraction (`{}`) is not an error — the UI shows an info note.
 - `npm run test:live` (gated by `LLM_LIVE=1`) is the diagnostic: it preflights `/v1/models`,
-  proves a text completion works, and runs image extraction only when `LLM_MODEL` points at a
-  vision model.
+  proves a text completion works, then attempts image extraction and degrades gracefully (like
+  the app) if no vision model is present. Point `LLM_MODEL` at a vision id to exercise the real
+  extraction path.
 
 ## Conventions
 

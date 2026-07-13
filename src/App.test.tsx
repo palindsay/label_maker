@@ -57,4 +57,33 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("LLM offline")).toBeInTheDocument());
   });
+
+  it("degrades to manual entry when the photo yields no fields", async () => {
+    vi.mocked(extractPeptideFromImage).mockResolvedValueOnce({});
+    render(<App />);
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    await waitFor(() => expect(screen.getByText(/No details could be read/)).toBeInTheDocument());
+    // The form stays fully usable — the default label is still valid/printable.
+    expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+  });
+
+  it("fails gracefully when the endpoint has no vision model", async () => {
+    vi.mocked(extractPeptideFromImage).mockRejectedValueOnce(
+      new Error(
+        "The inference endpoint has no multimodal (vision) model loaded, so it can't read the photo. Enter the label details manually.",
+      ),
+    );
+    render(<App />);
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    await waitFor(() =>
+      expect(screen.getByText(/no multimodal \(vision\) model/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+  });
 });

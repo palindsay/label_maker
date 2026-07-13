@@ -18,6 +18,7 @@ export function App() {
   const [label, setLabel] = useState<PeptideLabelInput>(INITIAL);
   const [busy, setBusy] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
+  const [llmNote, setLlmNote] = useState<string | null>(null);
 
   const parsed = peptideLabelSchema.safeParse(label);
   const recon = parsed.success ? reconstitution(parsed.data) : null;
@@ -26,12 +27,25 @@ export function App() {
   async function handleImage(file: File) {
     setBusy(true);
     setLlmError(null);
+    setLlmNote(null);
     try {
       const dataUrl = await fileToDataUrl(file);
       const fields = await extractPeptideFromImage(dataUrl);
+      const filled = Object.keys(fields);
+      if (filled.length === 0) {
+        setLlmNote("No details could be read from the photo — enter them manually.");
+        return;
+      }
       setLabel((prev) => ({ ...prev, ...fields }));
+      setLlmNote(`Filled from photo: ${filled.join(", ")}. Verify before printing.`);
     } catch (err) {
-      setLlmError(err instanceof Error ? err.message : "Image extraction failed");
+      // extractPeptideFromImage throws a user-safe LlmError message; fall back
+      // defensively for anything unexpected.
+      setLlmError(
+        err instanceof Error
+          ? err.message
+          : "Image auto-fill failed. Enter the label details manually.",
+      );
     } finally {
       setBusy(false);
     }
@@ -46,6 +60,7 @@ export function App() {
         <LabelForm value={label} onChange={setLabel} onImageSelected={handleImage} busy={busy} />
 
         {busy && <p className="status">Reading vial photo…</p>}
+        {llmNote && <p className="status">{llmNote}</p>}
         {llmError && <p className="error">{llmError}</p>}
         {errorMessage && <p className="error">{errorMessage}</p>}
 

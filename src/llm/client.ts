@@ -26,6 +26,38 @@ export const DEFAULT_LLM_CONFIG: LlmConfig = {
   model: env.VITE_LLM_MODEL ?? "gemma-4-31b",
 };
 
+/**
+ * Why image auto-fill failed. The app assumes a multimodal model is available
+ * and only branches on these when it turns out not to be:
+ *   - `unreachable`    the endpoint could not be contacted (DNS/refused/offline)
+ *   - `no-vision`      the model has no image support (no mmproj loaded)
+ *   - `model-missing`  the configured model id is not served by the endpoint
+ *   - `bad-response`   the endpoint replied in an unexpected shape
+ *   - `unknown`        any other non-OK response
+ */
+export type LlmFailureKind =
+  | "unreachable"
+  | "no-vision"
+  | "model-missing"
+  | "bad-response"
+  | "unknown";
+
+/**
+ * A failure of image auto-fill. `message` is safe to show the user; `kind`
+ * lets callers branch; `detail` carries the raw server text for logs.
+ */
+export class LlmError extends Error {
+  readonly kind: LlmFailureKind;
+  readonly detail: string | undefined;
+
+  constructor(kind: LlmFailureKind, message: string, detail?: string) {
+    super(message);
+    this.name = "LlmError";
+    this.kind = kind;
+    this.detail = detail;
+  }
+}
+
 /** Fields we attempt to read from an image; all optional. */
 export interface ExtractedPeptide {
   peptideName?: string;
@@ -132,11 +164,44 @@ const chatResponseSchema = z.object({
   choices: z.array(z.object({ message: z.object({ content: z.string() }) })).min(1),
 });
 
+/** Map a non-OK HTTP response to a typed, user-facing failure. */
+function classifyHttpError(status: number, body: string): LlmError {
+  const b = body.toLowerCase();
+
+  // Text-only model / no mmproj: the endpoint can't accept images at all.
+  if (/image input is not supported|mmproj|does not support image|no vision/.test(b)) {
+    return new LlmError(
+      "no-vision",
+      "The inference endpoint has no multimodal (vision) model loaded, so it can't read the photo. Enter the label details manually.",
+      body,
+    );
+  }
+
+  // Unknown model id (e.g. llama-swap "no router for requested model").
+  if (status === 404 || /no router|unknown model|model not found/.test(b)) {
+    return new LlmError(
+      "model-missing",
+      "The configured vision model isn't available on the inference endpoint. Enter the label details manually.",
+      body,
+    );
+  }
+
+  return new LlmError(
+    "unknown",
+    `Image auto-fill failed (status ${status}). Enter the label details manually.`,
+    body,
+  );
+}
+
 /**
  * Send a vial image to the vision model and return whatever peptide fields it
  * could read. `fetchImpl` is injectable for testing.
  *
- * @throws If the request fails or the server returns a non-OK status.
+ * Assumes a multimodal model is available; when it is not (or the endpoint is
+ * unreachable / misbehaving) it throws a typed {@link LlmError} whose `message`
+ * is safe to show the user, so callers can degrade to manual entry.
+ *
+ * @throws {LlmError} On any failure to obtain an extraction.
  */
 export async function extractPeptideFromImage(
   imageDataUrl: string,
@@ -146,22 +211,38 @@ export async function extractPeptideFromImage(
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
-  const response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(buildVisionRequest(imageDataUrl, config)),
-  });
-
-  if (!response.ok) {
-    // Surface the server's error body — e.g. llama-swap's "no router for
-    // requested model", or "image input is not supported ... provide mmproj".
-    const detail = await response.text().catch(() => "");
-    const suffix = detail ? `: ${detail.slice(0, 200)}` : "";
-    throw new Error(`LLM request failed (status ${response.status})${suffix}`);
+  let response: Response;
+  try {
+    response = await fetchImpl(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(buildVisionRequest(imageDataUrl, config)),
+    });
+  } catch (err) {
+    throw new LlmError(
+      "unreachable",
+      "Could not reach the inference endpoint. Check it is running, then enter the label details manually.",
+      err instanceof Error ? err.message : String(err),
+    );
   }
 
-  const json = chatResponseSchema.parse(await response.json());
-  const first = json.choices[0];
-  if (!first) throw new Error("LLM response contained no choices");
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw classifyHttpError(response.status, detail);
+  }
+
+  const parsed = chatResponseSchema.safeParse(await response.json().catch(() => null));
+  if (!parsed.success) {
+    throw new LlmError(
+      "bad-response",
+      "The inference endpoint returned an unexpected response. Enter the label details manually.",
+      parsed.error.message,
+    );
+  }
+
+  const first = parsed.data.choices[0];
+  if (!first) {
+    throw new LlmError("bad-response", "The inference endpoint returned no choices.");
+  }
   return parseExtractionContent(first.message.content);
 }
