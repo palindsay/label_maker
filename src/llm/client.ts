@@ -72,6 +72,8 @@ export interface ExtractedPeptide {
   peptideName?: string;
   vialMg?: number;
   lot?: string;
+  /** Purity, e.g. "99.2%" — typically only present on a CoA, not a vial. */
+  purity?: string;
 }
 
 type ContentPart =
@@ -95,9 +97,10 @@ const SYSTEM_PROMPT =
   "Respond with a single JSON object and nothing else.";
 
 const USER_PROMPT =
-  "Extract these fields from the vial image as JSON: " +
+  "Extract these fields from the peptide vial or Certificate of Analysis image as JSON: " +
   '`peptideName` (string, e.g. "BPC-157"), `vialMg` (number, total milligrams in the vial), ' +
-  "`lot` (string, batch/lot code). Omit any field you cannot read with confidence.";
+  '`lot` (string, batch/lot code), `purity` (string, e.g. "99.2%"). ' +
+  "Omit any field you cannot read with confidence.";
 
 /** Build the chat-completions request body for a data-URL image. */
 export function buildVisionRequest(imageDataUrl: string, config: LlmConfig): ChatCompletionRequest {
@@ -136,8 +139,19 @@ const rawSchema = z
     peptideName: z.string().trim().min(1).optional(),
     vialMg: z.union([z.number(), z.string()]).optional(),
     lot: z.string().trim().min(1).optional(),
+    purity: z.union([z.string(), z.number()]).optional(),
   })
   .partial();
+
+/** Normalize purity to a display string, appending "%" to a bare number. */
+function coercePurity(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return `${value}%`;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+  }
+  return undefined;
+}
 
 /**
  * Parse the model's message content into an {@link ExtractedPeptide}. Tolerant
@@ -166,6 +180,8 @@ export function parseExtractionContent(content: string): ExtractedPeptide {
   if (parsed.data.lot) result.lot = parsed.data.lot;
   const mg = coerceMg(parsed.data.vialMg);
   if (mg !== undefined) result.vialMg = mg;
+  const purity = coercePurity(parsed.data.purity);
+  if (purity !== undefined) result.purity = purity;
   return result;
 }
 

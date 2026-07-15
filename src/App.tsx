@@ -1,4 +1,7 @@
 import { useEffect, useState } from "react";
+import { autofillFromPhoto } from "./autofill";
+import { decodeQrFromDataUrl, rasterizePdfToDataUrl } from "./browser";
+import { fetchCoaImage } from "./coa";
 import { LabelForm } from "./components/LabelForm";
 import { LabelPreview } from "./components/LabelPreview";
 import { fileToDataUrl } from "./image";
@@ -25,6 +28,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [llmError, setLlmError] = useState<string | null>(null);
   const [llmNote, setLlmNote] = useState<string | null>(null);
+  const [mismatches, setMismatches] = useState<string[]>([]);
 
   // Discovered models + the one selected for image auto-fill. The endpoint's
   // roster changes, so we list it at runtime rather than hardcoding an id.
@@ -57,19 +61,35 @@ export function App() {
     setBusy(true);
     setLlmError(null);
     setLlmNote(null);
+    setMismatches([]);
     try {
       const dataUrl = await fileToDataUrl(file);
-      const fields = await extractPeptideFromImage(dataUrl, { ...DEFAULT_LLM_CONFIG, model });
-      const filled = Object.keys(fields);
-      if (filled.length === 0) {
-        setLlmNote("No details could be read from the photo — enter them manually.");
-        return;
+      const result = await autofillFromPhoto(dataUrl, {
+        decodeQr: decodeQrFromDataUrl,
+        extractFromImage: (image) =>
+          extractPeptideFromImage(image, { ...DEFAULT_LLM_CONFIG, model }),
+        fetchCoaImage: (url) => fetchCoaImage(url, { rasterizePdf: rasterizePdfToDataUrl }),
+      });
+
+      // `purity` isn't a label field — surface it in the note, not the form.
+      const { purity, ...labelFields } = result.fields;
+      const filled = Object.keys(labelFields);
+      if (filled.length > 0) {
+        setLabel((prev) => ({ ...prev, ...labelFields }));
       }
-      setLabel((prev) => ({ ...prev, ...fields }));
-      setLlmNote(`Filled from photo: ${filled.join(", ")}. Verify before printing.`);
+
+      const parts: string[] = [];
+      if (filled.length > 0) parts.push(`Filled: ${filled.join(", ")}`);
+      if (purity) parts.push(`CoA purity ${purity}`);
+      if (result.coaUrl) parts.push("CoA read from QR");
+      setLlmNote(
+        parts.length > 0
+          ? `${parts.join(" · ")}. Verify before printing.`
+          : "No details could be read from the photo — enter them manually.",
+      );
+      setMismatches(result.mismatches);
+      if (result.errors.length > 0) setLlmError(result.errors.join(" "));
     } catch (err) {
-      // extractPeptideFromImage throws a user-safe LlmError message; fall back
-      // defensively for anything unexpected.
       setLlmError(
         err instanceof Error
           ? err.message
@@ -109,6 +129,13 @@ export function App() {
 
         {busy && <p className="status">Reading vial photo…</p>}
         {llmNote && <p className="status">{llmNote}</p>}
+        {mismatches.length > 0 && (
+          <ul className="mismatches">
+            {mismatches.map((m) => (
+              <li key={m}>⚠ {m}</li>
+            ))}
+          </ul>
+        )}
         {discoverError && <p className="status">Model discovery: {discoverError}</p>}
         {llmError && <p className="error">{llmError}</p>}
         {errorMessage && <p className="error">{errorMessage}</p>}

@@ -2,11 +2,22 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { decodeQrFromDataUrl } from "./browser";
+import { fetchCoaImage } from "./coa";
 import { fileToDataUrl } from "./image";
 import { extractPeptideFromImage, listModels } from "./llm/client";
 
 vi.mock("./image", () => ({
   fileToDataUrl: vi.fn(async () => "data:image/png;base64,x"),
+}));
+
+// Browser-only glue (canvas / pdf.js) is unavailable in jsdom — stub it.
+vi.mock("./browser", () => ({
+  decodeQrFromDataUrl: vi.fn(async () => null),
+  rasterizePdfToDataUrl: vi.fn(async () => "data:image/png;base64,PDF"),
+}));
+vi.mock("./coa", () => ({
+  fetchCoaImage: vi.fn(async () => "data:image/png;base64,COA"),
 }));
 
 // Mock only the network-touching functions; keep pickVisionModel / config real.
@@ -25,6 +36,8 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.mocked(extractPeptideFromImage).mockResolvedValue({ peptideName: "TB-500", vialMg: 10 });
   vi.mocked(listModels).mockResolvedValue(DEFAULT_MODELS);
+  vi.mocked(decodeQrFromDataUrl).mockResolvedValue(null);
+  vi.mocked(fetchCoaImage).mockResolvedValue("data:image/png;base64,COA");
 });
 
 /** Render and wait for model discovery to settle. */
@@ -78,6 +91,26 @@ describe("App", () => {
     expect(fileToDataUrl).toHaveBeenCalledWith(file);
     await waitFor(() => expect(screen.getByDisplayValue("TB-500")).toBeInTheDocument());
     expect(screen.getByDisplayValue("10")).toBeInTheDocument();
+  });
+
+  it("reads a CoA from a QR code and flags a mismatch vs the vial photo", async () => {
+    vi.mocked(decodeQrFromDataUrl).mockResolvedValueOnce("https://coa.vendor.com/a.pdf");
+    vi.mocked(extractPeptideFromImage)
+      .mockResolvedValueOnce({ peptideName: "BPC-157", vialMg: 5 }) // vial photo
+      .mockResolvedValueOnce({ peptideName: "BPC-157", vialMg: 10, lot: "A1", purity: "99.2%" }); // CoA
+    await renderApp();
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    expect(fetchCoaImage).toHaveBeenCalledWith(
+      "https://coa.vendor.com/a.pdf",
+      expect.objectContaining({ rasterizePdf: expect.any(Function) }),
+    );
+    // CoA wins the merge, and the disagreement is surfaced.
+    await waitFor(() => expect(screen.getByDisplayValue("10")).toBeInTheDocument());
+    expect(screen.getByText(/Vial mg: photo "5" vs CoA "10"/)).toBeInTheDocument();
+    expect(screen.getByText(/CoA purity 99.2%/)).toBeInTheDocument();
   });
 
   it("shows an error when extraction fails", async () => {

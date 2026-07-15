@@ -59,6 +59,17 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   (injectable `fetchImpl`). Parsing tolerates code fences and `vialMg` as a string, and never
   throws on unusable model output — it returns `{}`.
 - **`src/image.ts`** — `fileToDataUrl` (FileReader → base64 data URL for the vision request).
+- **`src/qr.ts`** — `decodeQrFromImageData` (pure `jsQR` wrapper; deterministic, not LLM-based).
+- **`src/coa.ts`** — Certificate of Analysis handling. `validateCoaUrl` enforces http(s) + blocks
+  loopback/private/link-local hosts (SSRF); `fetchCoaImage` tries a direct fetch, falls back to
+  the `/coa` proxy on CORS failure, dispatches by content-type (image passthrough, PDF →
+  injected `rasterizePdf`), caps size, and throws a typed `CoaError`. Pure/injectable and tested.
+- **`src/autofill.ts`** — `autofillFromPhoto` orchestrates photo → (QR decode ‖ vision) → CoA
+  fetch → CoA vision → merge + cross-check. CoA overrides the vial photo (more authoritative) and
+  disagreements are collected in `mismatches`. Never throws — failures go in `errors`.
+- **`src/browser.ts`** — browser-only glue that needs a real canvas / pdf.js worker
+  (`decodeQrFromDataUrl`, `rasterizePdfToDataUrl`, pdf.js lazy-imported). Excluded from coverage;
+  exercised by the build and live runs.
 - **`src/components/`** — presentational React; no domain logic beyond wiring.
 - **`src/index.css`** — carries the print contract (see below).
 
@@ -83,6 +94,11 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   sidesteps CORS. Change the target by editing `LLM_TARGET` in `vite.config.ts`.
 - Override the base URL with `VITE_LLM_BASE_URL` (see `.env.example`). Calling a host directly
   (not via the proxy) requires CORS on that server.
+- **CoA fetch** uses a second dev/preview proxy: `vite.config.ts`'s `coaProxyPlugin` serves
+  `/coa?url=<CoA URL>`, re-validates the (untrusted) URL server-side with `validateCoaUrl`, and
+  fetches it without CORS. `fetchCoaImage` tries the QR URL directly first and only falls back to
+  `/coa` on a CORS/network failure. Like `/v1`, the proxy exists only under `dev`/`preview` — a
+  static build is direct-fetch only.
 - **Model discovery is dynamic.** The endpoint's roster changes (it may serve Gemma 4 31B, a
   Qwen VL, LLaVA, …), so the app does not hardcode a model id. On mount it calls `listModels`
   (`GET /v1/models`) and `pickVisionModel` chooses one, in priority order: (1) a `VITE_LLM_MODEL`

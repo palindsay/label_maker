@@ -50,6 +50,14 @@ describe("parseExtractionContent", () => {
   it("drops fields with the wrong type", () => {
     expect(parseExtractionContent('{"peptideName":123,"vialMg":"nope"}')).toEqual({});
   });
+
+  it("reads purity, appending % to a bare number", () => {
+    expect(parseExtractionContent('{"peptideName":"BPC-157","purity":"99.2%"}')).toEqual({
+      peptideName: "BPC-157",
+      purity: "99.2%",
+    });
+    expect(parseExtractionContent('{"purity":98}')).toEqual({ purity: "98%" });
+  });
 });
 
 describe("pickVisionModel", () => {
