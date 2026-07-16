@@ -16,15 +16,23 @@ type LabelPreviewProps = {
 
 const DASH = "—";
 
-/** Guarded numeric formatter: shows an em-dash for NaN/absent values. */
-function num(value: number, fmt: (n: number) => string): string {
-  return Number.isFinite(value) ? fmt(value) : DASH;
+/** Shrink the peptide-name font as the name gets longer so it stays on one line. */
+function nameFontPt(name: string): number {
+  if (name.length > 16) return 6.5;
+  if (name.length > 11) return 7.5;
+  return 8.5;
+}
+
+/** A bare millilitre number (reuses the mg formatter's trailing-zero trimming). */
+function mlNumber(n: number): string {
+  return formatMg(n).replace(" mg", "");
 }
 
 /**
- * Renders a peptide vial label at true physical size (40mm x 14mm). The
- * `.label-print` element is the only thing that reaches paper — see the
- * `@media print` block in index.css.
+ * Renders a peptide vial label at true physical size (40mm x 14mm), optimized
+ * for at-a-glance readability: the syringe draw (IU) is the largest element,
+ * with only the dosing and source facts that are actually needed. The
+ * `.label-print` element is the only thing that reaches paper (see index.css).
  */
 export function LabelPreview({ label, recon }: LabelPreviewProps) {
   const style = {
@@ -32,31 +40,44 @@ export function LabelPreview({ label, recon }: LabelPreviewProps) {
     height: `${mmToPx(NELKO_LABEL_SIZE.heightMm)}px`,
   } as const;
 
-  const meta = [label.dateReconstituted, label.lot].filter((s) => s.trim().length > 0).join(" · ");
+  const name = label.peptideName.trim() || DASH;
+  const amount = Number.isFinite(label.vialMg) ? formatMg(label.vialMg) : DASH;
+  const iu = recon ? formatUnits(recon.insulinUnits) : DASH;
+  const mcg = Number.isFinite(label.doseMcg) ? formatMcg(label.doseMcg) : DASH;
+  const source = recon
+    ? `${formatConcentration(recon.concentrationMcgPerMl)} · ${mlNumber(label.bacWaterMl)} mL BAC`
+    : DASH;
+
+  const foot = [
+    label.dateReconstituted.trim() && `Recon ${label.dateReconstituted.trim()}`,
+    label.lot.trim() && `Lot ${label.lot.trim()}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const note = label.note.trim();
 
   return (
     <div className="label-print" style={style} aria-label="Label preview">
-      <div className="row r-head">
-        <span className="name">{label.peptideName.trim() || DASH}</span>
-        <span className="amount">{num(label.vialMg, formatMg)}</span>
+      <div className="lbl-head">
+        <span className="lbl-name" style={{ fontSize: `${nameFontPt(name)}pt` }}>
+          {name}
+        </span>
+        <span className="lbl-amount">{amount}</span>
       </div>
 
-      <div className="row r-dose">
-        <span>{num(label.doseMcg, formatMcg)}/dose</span>
-        <span className="units">{recon ? formatUnits(recon.insulinUnits) : DASH}</span>
+      <div className="lbl-dose">
+        <span className="lbl-iu">{iu}</span>
+        <span className="lbl-mcg">{mcg}</span>
       </div>
 
-      <div className="row r-conc">
-        <span>{recon ? formatConcentration(recon.concentrationMcgPerMl) : DASH}</span>
-        <span>{num(label.bacWaterMl, (n) => `${formatMg(n).replace(" mg", "")} mL BAC`)}</span>
-      </div>
+      <div className="lbl-source">{source}</div>
 
-      <div className="row r-meta">
-        <span>{meta}</span>
-        <span>{recon ? `~${recon.wholeDosesPerVial} doses` : ""}</span>
-      </div>
-
-      {label.note.trim() && <div className="row r-note">{label.note.trim()}</div>}
+      {(foot || note) && (
+        <div className="lbl-foot">
+          <span>{foot}</span>
+          {note && <span className="lbl-note">{note}</span>}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,23 +15,20 @@ const base: PeptideLabelInput = {
 };
 
 describe("LabelPreview", () => {
-  it("renders the peptide, amount, and computed dosing", () => {
+  it("renders the peptide, amount, and hero dosing", () => {
     render(<LabelPreview label={base} recon={reconstitution(base)} />);
 
     expect(screen.getByText("BPC-157")).toBeInTheDocument();
     expect(screen.getByText("5 mg")).toBeInTheDocument();
-    expect(screen.getByText("250 mcg/dose")).toBeInTheDocument();
-    expect(screen.getByText("10 IU")).toBeInTheDocument();
-    expect(screen.getByText("2.5 mg/mL")).toBeInTheDocument();
-    expect(screen.getByText("2 mL BAC")).toBeInTheDocument();
-    expect(screen.getByText("~20 doses")).toBeInTheDocument();
-    expect(screen.getByText("2026-07-12 · A1")).toBeInTheDocument();
+    expect(screen.getByText("10 IU")).toBeInTheDocument(); // the hero draw
+    expect(screen.getByText("250 mcg")).toBeInTheDocument();
+    expect(screen.getByText("2.5 mg/mL · 2 mL BAC")).toBeInTheDocument();
+    expect(screen.getByText("Recon 2026-07-12 · Lot A1")).toBeInTheDocument();
   });
 
   it("shows dashes when dosing cannot be computed", () => {
-    const invalid = { ...base, vialMg: Number.NaN };
-    render(<LabelPreview label={invalid} recon={null} />);
-    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+    render(<LabelPreview label={{ ...base, vialMg: Number.NaN }} recon={null} />);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(2);
   });
 
   it("sizes the label to 40mm (~151px at 96dpi)", () => {

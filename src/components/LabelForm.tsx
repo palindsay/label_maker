@@ -27,9 +27,16 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
       onChange({ ...value, [key]: e.target.valueAsNumber });
 
   const applyPreset = (e: ChangeEvent<HTMLSelectElement>) => {
-    const name = e.target.value as PeptidePresetName;
-    const preset = PEPTIDE_PRESETS[name];
-    if (preset) onChange({ ...value, peptideName: name, ...preset });
+    const preset = PEPTIDE_PRESETS[e.target.value as PeptidePresetName];
+    if (preset) {
+      onChange({
+        ...value,
+        peptideName: preset.name,
+        vialMg: preset.vialMg,
+        bacWaterMl: preset.bacWaterMl,
+        doseMcg: preset.doseMcg,
+      });
+    }
   };
 
   const pickImage = (e: ChangeEvent<HTMLInputElement>) => {

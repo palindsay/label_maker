@@ -15,9 +15,12 @@ import {
   pickVisionModel,
 } from "./llm/client";
 
+const BPC = PEPTIDE_PRESETS["BPC-157"];
 const INITIAL: PeptideLabelInput = {
-  peptideName: "BPC-157",
-  ...PEPTIDE_PRESETS["BPC-157"],
+  peptideName: BPC.name,
+  vialMg: BPC.vialMg,
+  bacWaterMl: BPC.bacWaterMl,
+  doseMcg: BPC.doseMcg,
   lot: "",
   dateReconstituted: "",
   note: "Research use only",

@@ -61,7 +61,9 @@ reading function over the network.
 
 1. Fill in **Peptide name**, **Vial (mg)**, **BAC water (mL)**, **Dose (mcg)**.
    Optionally set **Lot**, **Date**, **Note** (e.g. "Research use only"), or start from a
-   **Preset** (BPC-157 / TB-500 / Semaglutide).
+   **Preset** (BPC-157, TB-500, Tirzepatide, Retatrutide, Tesamorelin, Ipamorelin, DSIP, KPV,
+   SS-31, Thymosin α-1, and more). Preset BAC-water and dose values are **conventional starting
+   points, not medical advice** — confirm them against your protocol.
 2. The preview (right) updates live and shows the derived dosing. Example — **5 mg + 2 mL,
    250 mcg dose** →
 

@@ -137,59 +137,74 @@ button:disabled {
   transform-origin: top center;
 }
 
-/* The physical label: exactly 40mm x 14mm, black-on-white for direct thermal. */
+/* The physical label: exactly 40mm x 14mm, black-on-white for direct thermal.
+   Tuned for legibility — the syringe draw (IU) is the dominant element. */
 .label-print {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 0.3mm;
-  padding: 0.7mm 1mm;
+  padding: 0.6mm 1mm;
   background: #fff;
   color: #000;
   border: 1px dashed #bbb; /* cut guide, screen only */
   overflow: hidden;
-  font-family: "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
-  line-height: 1.02;
+  font-family: "Helvetica Neue", Arial, system-ui, sans-serif;
+  line-height: 1.04;
 }
 
-.label-print .row {
+/* Row 1 — peptide name + vial amount. */
+.lbl-head {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 1mm;
   white-space: nowrap;
 }
 
-.r-head .name {
+.lbl-name {
+  font-weight: 800; /* size is set inline, scaled to the name length */
+}
+
+.lbl-amount {
   font-weight: 700;
+  font-size: 7pt;
+}
+
+/* Row 2 — the injection: syringe units (hero) + dose in mcg. */
+.lbl-dose {
+  display: flex;
+  align-items: baseline;
+  gap: 1.4mm;
+  white-space: nowrap;
+}
+
+.lbl-iu {
+  font-size: 12pt;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.lbl-mcg {
   font-size: 7.5pt;
-}
-
-.r-head .amount {
   font-weight: 700;
-  font-size: 7pt;
 }
 
-.r-dose {
-  font-weight: 700;
-  font-size: 7pt;
+/* Row 3 — source: concentration + reconstitution volume. */
+.lbl-source {
+  font-size: 5.6pt;
+  white-space: nowrap;
 }
 
-.r-dose .units {
-  padding: 0 0.6mm;
-  border: 0.2mm solid #000;
-  border-radius: 0.6mm;
-}
-
-.r-conc {
-  font-size: 5.8pt;
-}
-
-.r-meta {
+/* Row 4 — traceability: recon date, lot, optional note. */
+.lbl-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 1mm;
   font-size: 5pt;
+  white-space: nowrap;
 }
 
-.r-note {
-  font-size: 5pt;
+.lbl-note {
   font-style: italic;
 }
 
