@@ -38,6 +38,25 @@ npm run build     # typecheck + bundle to dist/
 npm run preview   # serve dist/ (default http://localhost:4173)
 ```
 
+### Serve on your network (0.0.0.0)
+
+To reach the app from other machines (phone, another PC) on your LAN:
+
+```bash
+npm run serve                 # build, then serve on 0.0.0.0:4173
+npm run serve:dev             # dev server (HMR) on 0.0.0.0:5173
+PORT=8088 npm run serve       # choose the port
+```
+
+The script (`scripts/serve.sh`) prints the LAN URL, e.g. `http://192.168.1.63:4173/`. Both the
+`/v1` (LLM) and `/coa` (CoA) proxies work in this mode, so photo auto-fill and QR-linked CoA
+reading function over the network.
+
+> Binding `0.0.0.0` exposes the app **and** its `/v1` + `/coa` proxies to everyone on the LAN —
+> only run it on a network you trust. Accessing by **IP** works out of the box; to reach it by a
+> custom **hostname** you may need to add that host to `server.allowedHosts` / `preview.allowedHosts`
+> in `vite.config.ts`.
+
 ## 4. Make a label (the 30-second path)
 
 1. Fill in **Peptide name**, **Vial (mg)**, **BAC water (mL)**, **Dose (mcg)**.

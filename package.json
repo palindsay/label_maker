@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "serve": "./scripts/serve.sh",
+    "serve:dev": "./scripts/serve.sh --dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
