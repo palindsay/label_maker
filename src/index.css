@@ -73,6 +73,23 @@ body {
   gap: 0.5rem;
 }
 
+.label-form .amount {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.label-form .amount-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.label-form .amount-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+
 .label-form input,
 .label-form select {
   font: inherit;
@@ -204,8 +221,8 @@ button:disabled {
   white-space: nowrap;
 }
 
-.lbl-note {
-  font-style: italic;
+.lbl-mfr {
+  font-weight: 700;
 }
 
 @media print {

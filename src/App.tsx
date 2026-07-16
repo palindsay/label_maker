@@ -23,7 +23,7 @@ const INITIAL: PeptideLabelInput = {
   doseMcg: BPC.doseMcg,
   lot: "",
   dateReconstituted: "",
-  note: "Research use only",
+  manufacturer: "",
 };
 
 export function App() {

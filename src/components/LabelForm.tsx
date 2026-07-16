@@ -1,5 +1,10 @@
 import type { ChangeEvent } from "react";
-import { PEPTIDE_PRESETS, type PeptideLabelInput, type PeptidePresetName } from "../label/schema";
+import {
+  COMMON_VIAL_MG,
+  PEPTIDE_PRESETS,
+  type PeptideLabelInput,
+  type PeptidePresetName,
+} from "../label/schema";
 
 type LabelFormProps = {
   value: PeptideLabelInput;
@@ -18,7 +23,7 @@ function numValue(n: number): number | string {
 /** Controlled form for peptide vial + dosing details. Presentational only. */
 export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormProps) {
   const setText =
-    (key: "peptideName" | "lot" | "dateReconstituted" | "note") =>
+    (key: "peptideName" | "lot" | "dateReconstituted" | "manufacturer") =>
     (e: ChangeEvent<HTMLInputElement>) =>
       onChange({ ...value, [key]: e.target.value });
 
@@ -39,10 +44,18 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
     }
   };
 
+  const pickAmount = (e: ChangeEvent<HTMLSelectElement>) => {
+    if (e.target.value !== "custom") onChange({ ...value, vialMg: Number(e.target.value) });
+  };
+
   const pickImage = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) onImageSelected(file);
   };
+
+  const amountSelectValue = (COMMON_VIAL_MG as readonly number[]).includes(value.vialMg)
+    ? String(value.vialMg)
+    : "custom";
 
   return (
     <form className="label-form" onSubmit={(e) => e.preventDefault()}>
@@ -70,17 +83,30 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
         <input type="text" value={value.peptideName} onChange={setText("peptideName")} />
       </label>
 
-      <div className="row3">
-        <label>
-          Vial (mg)
+      <div className="amount">
+        <span className="amount-title">Vial amount (mg)</span>
+        <div className="amount-row">
+          <select aria-label="Common vial mg" value={amountSelectValue} onChange={pickAmount}>
+            {COMMON_VIAL_MG.map((mg) => (
+              <option key={mg} value={mg}>
+                {mg} mg
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
+          </select>
           <input
+            aria-label="Vial mg"
             type="number"
             min={0}
             step="any"
+            placeholder="mg"
             value={numValue(value.vialMg)}
             onChange={setNumber("vialMg")}
           />
-        </label>
+        </div>
+      </div>
+
+      <div className="row2">
         <label>
           BAC water (mL)
           <input
@@ -119,12 +145,12 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
       </div>
 
       <label>
-        Note
+        Manufacturer
         <input
           type="text"
-          value={value.note}
-          placeholder="e.g. Research use only · Fridge"
-          onChange={setText("note")}
+          value={value.manufacturer}
+          placeholder="e.g. brand / source"
+          onChange={setText("manufacturer")}
         />
       </label>
     </form>

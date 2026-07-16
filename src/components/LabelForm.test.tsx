@@ -11,7 +11,7 @@ const base: PeptideLabelInput = {
   doseMcg: 250,
   lot: "",
   dateReconstituted: "",
-  note: "",
+  manufacturer: "",
 };
 
 function renderForm(overrides: Partial<Parameters<typeof LabelForm>[0]> = {}) {
@@ -36,21 +36,33 @@ describe("LabelForm", () => {
     expect(onChange).toHaveBeenLastCalledWith({ ...base, peptideName: "BPC-157!" });
   });
 
-  it("emits a numeric vial mass from the number field", () => {
+  it("emits a numeric vial mass from the custom mg field", () => {
     const { onChange } = renderForm();
-    fireEvent.change(screen.getByLabelText("Vial (mg)"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Vial mg"), { target: { value: "7" } });
     expect(onChange).toHaveBeenLastCalledWith({ ...base, vialMg: 7 });
+  });
+
+  it("sets the vial mg from the common-amount picker", async () => {
+    const { onChange } = renderForm();
+    await userEvent.selectOptions(screen.getByLabelText("Common vial mg"), "30");
+    expect(onChange).toHaveBeenLastCalledWith({ ...base, vialMg: 30 });
+  });
+
+  it("emits the manufacturer on input", async () => {
+    const { onChange } = renderForm();
+    await userEvent.type(screen.getByLabelText("Manufacturer"), "X");
+    expect(onChange).toHaveBeenLastCalledWith({ ...base, manufacturer: "X" });
   });
 
   it("applies a preset (name + dosing) on selection", async () => {
     const { onChange } = renderForm();
-    await userEvent.selectOptions(screen.getByLabelText("Preset"), "TB-500");
+    await userEvent.selectOptions(screen.getByLabelText("Preset"), "Semaglutide");
     expect(onChange).toHaveBeenLastCalledWith({
       ...base,
-      peptideName: "TB-500",
+      peptideName: "Semaglutide",
       vialMg: 5,
       bacWaterMl: 2,
-      doseMcg: 500,
+      doseMcg: 250,
     });
   });
 

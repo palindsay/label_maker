@@ -54,7 +54,7 @@ export function LabelPreview({ label, recon }: LabelPreviewProps) {
   ]
     .filter(Boolean)
     .join(" · ");
-  const note = label.note.trim();
+  const manufacturer = label.manufacturer.trim();
 
   return (
     <div className="label-print" style={style} aria-label="Label preview">
@@ -72,10 +72,10 @@ export function LabelPreview({ label, recon }: LabelPreviewProps) {
 
       <div className="lbl-source">{source}</div>
 
-      {(foot || note) && (
+      {(foot || manufacturer) && (
         <div className="lbl-foot">
           <span>{foot}</span>
-          {note && <span className="lbl-note">{note}</span>}
+          {manufacturer && <span className="lbl-mfr">{manufacturer}</span>}
         </div>
       )}
     </div>

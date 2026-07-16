@@ -11,11 +11,11 @@ const base: PeptideLabelInput = {
   doseMcg: 250,
   lot: "A1",
   dateReconstituted: "2026-07-12",
-  note: "",
+  manufacturer: "AcmeLabs",
 };
 
 describe("LabelPreview", () => {
-  it("renders the peptide, amount, and hero dosing", () => {
+  it("renders the peptide, amount, hero dosing, and manufacturer", () => {
     render(<LabelPreview label={base} recon={reconstitution(base)} />);
 
     expect(screen.getByText("BPC-157")).toBeInTheDocument();
@@ -24,6 +24,7 @@ describe("LabelPreview", () => {
     expect(screen.getByText("250 mcg")).toBeInTheDocument();
     expect(screen.getByText("2.5 mg/mL · 2 mL BAC")).toBeInTheDocument();
     expect(screen.getByText("Recon 2026-07-12 · Lot A1")).toBeInTheDocument();
+    expect(screen.getByText("AcmeLabs")).toBeInTheDocument();
   });
 
   it("shows dashes when dosing cannot be computed", () => {
