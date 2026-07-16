@@ -9,6 +9,8 @@ form.
 > Verify every printed label against the vial and your protocol. Dosing assumes a **U-100
 > insulin syringe** (100 units = 1 mL).
 
+**New here? Read [QUICKSTART.md](./QUICKSTART.md)** — install, run, print, and photo/CoA auto-fill in a few minutes.
+
 ## What it computes
 
 From `vial mg`, `BAC water mL`, and `dose mcg` it derives:
