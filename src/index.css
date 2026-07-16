@@ -207,22 +207,27 @@ button:disabled {
 }
 
 /* Row 3 — source: concentration + reconstitution volume. */
+/* Row 3 — source: concentration + reconstitution, with manufacturer right-aligned. */
 .lbl-source {
-  font-size: 5.6pt;
-  white-space: nowrap;
-}
-
-/* Row 4 — traceability: recon date, lot, optional note. */
-.lbl-foot {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
   gap: 1mm;
+  font-size: 5.6pt;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Row 4 — traceability: recon date + lot. */
+.lbl-foot {
   font-size: 5pt;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .lbl-mfr {
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 @media print {
@@ -251,5 +256,54 @@ button:disabled {
 
   .label-print {
     border: none;
+  }
+}
+
+/* --- Responsive: stack the editor over the preview on small screens. --- */
+@media (max-width: 720px) {
+  .app {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    min-height: auto;
+  }
+
+  .editor h1 {
+    font-size: 1.2rem;
+  }
+
+  .stage {
+    /* The preview is transform-scaled, so clip any visual overflow. */
+    padding: 2rem 0.5rem;
+    overflow: hidden;
+  }
+
+  .preview-frame {
+    transform: scale(2.3);
+  }
+
+  /* Comfortable tap targets; 16px inputs stop iOS from zooming on focus. */
+  .label-form input,
+  .label-form select,
+  .model-picker select {
+    padding: 0.6rem 0.5rem;
+    font-size: 16px;
+  }
+
+  .editor button {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 400px) {
+  .preview-frame {
+    transform: scale(2);
+  }
+
+  .label-form .row2,
+  .label-form .amount-row {
+    grid-template-columns: 1fr;
   }
 }

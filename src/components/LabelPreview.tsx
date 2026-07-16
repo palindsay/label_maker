@@ -70,14 +70,12 @@ export function LabelPreview({ label, recon }: LabelPreviewProps) {
         <span className="lbl-mcg">{mcg}</span>
       </div>
 
-      <div className="lbl-source">{source}</div>
+      <div className="lbl-source">
+        <span>{source}</span>
+        {manufacturer && <span className="lbl-mfr">{manufacturer}</span>}
+      </div>
 
-      {(foot || manufacturer) && (
-        <div className="lbl-foot">
-          <span>{foot}</span>
-          {manufacturer && <span className="lbl-mfr">{manufacturer}</span>}
-        </div>
-      )}
+      {foot && <div className="lbl-foot">{foot}</div>}
     </div>
   );
 }
