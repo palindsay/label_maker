@@ -68,10 +68,11 @@ export default defineConfig({
   plugins: [react(), coaProxyPlugin()],
   // `host: true` binds 0.0.0.0 so anyone on the LAN can reach the app (and the
   // /v1 + /coa proxies) via this host's IP. Only run on a network you trust.
-  // Access by IP works out of the box; to reach it by hostname add the name to
-  // `allowedHosts` (Vite blocks non-IP Host headers by default — DNS-rebind guard).
-  server: { host: true, proxy },
-  preview: { host: true, proxy },
+  // Access by IP works out of the box; Vite blocks non-IP Host headers by
+  // default (DNS-rebind guard). The leading-dot `allowedHosts` entry permits
+  // this host's mDNS name and any other `*.local` name on the trusted LAN.
+  server: { host: true, allowedHosts: [".local"], proxy },
+  preview: { host: true, allowedHosts: [".local"], proxy },
   test: {
     globals: true,
     environment: "jsdom",
