@@ -66,8 +66,12 @@ function coaProxyPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), coaProxyPlugin()],
-  server: { proxy },
-  preview: { proxy },
+  // `host: true` binds 0.0.0.0 so anyone on the LAN can reach the app (and the
+  // /v1 + /coa proxies) via this host's IP. Only run on a network you trust.
+  // Access by IP works out of the box; to reach it by hostname add the name to
+  // `allowedHosts` (Vite blocks non-IP Host headers by default — DNS-rebind guard).
+  server: { host: true, proxy },
+  preview: { host: true, proxy },
   test: {
     globals: true,
     environment: "jsdom",
