@@ -50,6 +50,42 @@ describe("autofillFromPhoto", () => {
     expect(result.mismatches).toEqual([]);
   });
 
+  it("fills the manufacturer from the CoA when the photo lacks it", async () => {
+    const d = deps({
+      decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),
+      extractFromImage: vi
+        .fn()
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", vialMg: 10 })
+        .mockResolvedValueOnce({
+          peptideName: "Ipamorelin",
+          manufacturer: "utherpeptide.com",
+          lot: "IP10-0106",
+          purity: "99.780%",
+        }),
+    });
+
+    const result = await autofillFromPhoto(PHOTO, d);
+
+    expect(result.fields.manufacturer).toBe("utherpeptide.com");
+    expect(result.mismatches).toEqual([]);
+  });
+
+  it("flags a manufacturer disagreement between the photo and the CoA (CoA wins)", async () => {
+    const d = deps({
+      decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),
+      extractFromImage: vi
+        .fn()
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", manufacturer: "Acme Labs" })
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", manufacturer: "utherpeptide.com" }),
+    });
+
+    const result = await autofillFromPhoto(PHOTO, d);
+
+    expect(result.fields.manufacturer).toBe("utherpeptide.com");
+    expect(result.mismatches).toHaveLength(1);
+    expect(result.mismatches[0]).toMatch(/Manufacturer/);
+  });
+
   it("flags a mismatch between the photo and the CoA (CoA wins)", async () => {
     const d = deps({
       decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),

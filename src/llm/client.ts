@@ -72,6 +72,8 @@ export interface ExtractedPeptide {
   peptideName?: string;
   vialMg?: number;
   lot?: string;
+  /** Brand / vendor / manufacturer — printed on a vial, or a CoA's "Manufacturer"/"Client". */
+  manufacturer?: string;
   /** Purity, e.g. "99.2%" — typically only present on a CoA, not a vial. */
   purity?: string;
 }
@@ -93,13 +95,19 @@ export interface ChatCompletionRequest {
 }
 
 const SYSTEM_PROMPT =
-  "You read peptide vial labels. Extract only what is clearly printed. " +
-  "Respond with a single JSON object and nothing else.";
+  "You read peptide vial labels and Certificates of Analysis (lab test reports). " +
+  "Extract only what is clearly printed. Respond with a single JSON object and nothing else.";
 
 const USER_PROMPT =
-  "Extract these fields from the peptide vial or Certificate of Analysis image as JSON: " +
-  '`peptideName` (string, e.g. "BPC-157"), `vialMg` (number, total milligrams in the vial), ' +
-  '`lot` (string, batch/lot code), `purity` (string, e.g. "99.2%"). ' +
+  "Extract these fields as JSON from the image, which is either a peptide vial label or a " +
+  "Certificate of Analysis / lab test report: " +
+  '`peptideName` (string, the peptide\'s name, e.g. "BPC-157" or "Ipamorelin"; on a report ' +
+  "prefer the full name from the results table over an abbreviated sample name), " +
+  '`vialMg` (number, the labeled total milligrams of peptide in the vial, e.g. 10 from "10mg"), ' +
+  "`manufacturer` (string, the brand / vendor / manufacturer / supplier; on a report use the " +
+  '"Manufacturer" field, or "Client" if there is no separate manufacturer, e.g. "utherpeptide.com"), ' +
+  '`lot` (string, the lot or batch code, e.g. "IP10-0106"), ' +
+  '`purity` (string, the assay purity, e.g. "99.8%"). ' +
   "Omit any field you cannot read with confidence.";
 
 /** Build the chat-completions request body for a data-URL image. */
@@ -139,6 +147,7 @@ const rawSchema = z
     peptideName: z.string().trim().min(1).optional(),
     vialMg: z.union([z.number(), z.string()]).optional(),
     lot: z.string().trim().min(1).optional(),
+    manufacturer: z.string().trim().min(1).optional(),
     purity: z.union([z.string(), z.number()]).optional(),
   })
   .partial();
@@ -178,6 +187,7 @@ export function parseExtractionContent(content: string): ExtractedPeptide {
   const result: ExtractedPeptide = {};
   if (parsed.data.peptideName) result.peptideName = parsed.data.peptideName;
   if (parsed.data.lot) result.lot = parsed.data.lot;
+  if (parsed.data.manufacturer) result.manufacturer = parsed.data.manufacturer;
   const mg = coerceMg(parsed.data.vialMg);
   if (mg !== undefined) result.vialMg = mg;
   const purity = coercePurity(parsed.data.purity);

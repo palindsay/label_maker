@@ -23,6 +23,21 @@ describe("buildVisionRequest", () => {
     );
     expect(image?.image_url?.url).toBe(IMG);
   });
+
+  it("asks for the manufacturer and covers Certificate of Analysis reports", () => {
+    const body = buildVisionRequest(IMG, CFG);
+    const texts: string[] = [];
+    for (const m of body.messages) {
+      if (typeof m.content === "string") {
+        texts.push(m.content);
+      } else {
+        for (const part of m.content) if (part.type === "text") texts.push(part.text);
+      }
+    }
+    const prompt = texts.join(" ").toLowerCase();
+    expect(prompt).toContain("manufacturer");
+    expect(prompt).toContain("certificate of analysis");
+  });
 });
 
 describe("parseExtractionContent", () => {
@@ -57,6 +72,20 @@ describe("parseExtractionContent", () => {
       purity: "99.2%",
     });
     expect(parseExtractionContent('{"purity":98}')).toEqual({ purity: "98%" });
+  });
+
+  it("reads the manufacturer from a CoA extraction", () => {
+    expect(
+      parseExtractionContent(
+        '{"peptideName":"Ipamorelin","vialMg":10,"manufacturer":"utherpeptide.com","lot":"IP10-0106","purity":"99.780%"}',
+      ),
+    ).toEqual({
+      peptideName: "Ipamorelin",
+      vialMg: 10,
+      manufacturer: "utherpeptide.com",
+      lot: "IP10-0106",
+      purity: "99.780%",
+    });
   });
 });
 

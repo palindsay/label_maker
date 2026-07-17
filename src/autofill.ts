@@ -26,6 +26,7 @@ export interface AutofillResult {
 const CROSS_CHECK = [
   { key: "peptideName", label: "Peptide" },
   { key: "vialMg", label: "Vial mg" },
+  { key: "manufacturer", label: "Manufacturer" },
   { key: "lot", label: "Lot" },
 ] as const;
 
