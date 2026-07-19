@@ -1,0 +1,33 @@
+# systemd *user* service template for the Peptide Label Maker.
+#
+# This is a template: `scripts/install-service.sh` substitutes @REPO_DIR@ and
+# @NODE_BIN_DIR@ (nvm's Node lives outside the default PATH) and writes the
+# rendered unit to ~/.config/systemd/user/label-maker.service.
+#
+# Runs as your user (not root) so the nvm toolchain resolves, and relies on
+# lingering (`loginctl enable-linger`) to start at boot without a login session.
+[Unit]
+Description=Peptide Label Maker — LAN web app (build + vite preview)
+Documentation=https://github.com/palindsay/label_maker
+After=network-online.target
+Wants=network-online.target
+# Don't hammer a failing build in a tight loop.
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+WorkingDirectory=@REPO_DIR@
+# nvm-managed Node is not on the default PATH; point at the resolved bin dir.
+Environment=PATH=@NODE_BIN_DIR@:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+# serve.sh builds the current source, then exec's `vite preview` on 0.0.0.0:4173
+# (also serving the /v1 and /coa proxies). Set PORT= here to change the port.
+ExecStart=@REPO_DIR@/scripts/serve.sh
+Restart=on-failure
+RestartSec=10
+# Light hardening — a static server on a trusted LAN, running as your own user.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
