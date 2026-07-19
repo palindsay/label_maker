@@ -104,7 +104,10 @@ describe("App", () => {
 
   it("uses the CoA vial mg over the dropdown default", async () => {
     // Form starts at the BPC-157 default of 10 mg; the CoA reports 20 mg.
-    vi.mocked(extractPeptideFromImage).mockResolvedValueOnce({ peptideName: "BPC-157", vialMg: 20 });
+    vi.mocked(extractPeptideFromImage).mockResolvedValueOnce({
+      peptideName: "BPC-157",
+      vialMg: 20,
+    });
     await renderApp();
     expect(screen.getByLabelText("Vial mg")).toHaveValue(10);
 
