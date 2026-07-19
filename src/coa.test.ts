@@ -16,18 +16,17 @@ describe("validateCoaUrl", () => {
     expect(validateCoaUrl("ftp://host/x").ok).toBe(false);
   });
 
-  it("rejects loopback, private, and link-local hosts (SSRF)", () => {
+  it("allows loopback/private/LAN hosts (trusted LAN — any host is fine)", () => {
     for (const u of [
       "http://localhost/x",
       "http://127.0.0.1/x",
       "http://10.0.0.5/x",
       "http://192.168.1.10/x",
       "http://172.16.0.1/x",
-      "http://169.254.169.254/x",
-      "https://printer.local/x",
+      "https://rastahp1.local/coa.pdf",
       "http://[::1]/x",
     ]) {
-      expect(validateCoaUrl(u).ok, u).toBe(false);
+      expect(validateCoaUrl(u).ok, u).toBe(true);
     }
   });
 
@@ -82,9 +81,9 @@ describe("fetchCoaImage", () => {
     expect(err.kind).toBe("unreachable");
   });
 
-  it("throws 'invalid-url' before fetching for a blocked URL", async () => {
+  it("throws 'invalid-url' before fetching for a non-http(s) URL", async () => {
     const fetchImpl = vi.fn();
-    const err = await fetchCoaImage("http://127.0.0.1/x", { fetchImpl, rasterizePdf }).catch(
+    const err = await fetchCoaImage("file:///etc/passwd", { fetchImpl, rasterizePdf }).catch(
       (e) => e,
     );
     expect(err).toBeInstanceOf(CoaError);
@@ -120,5 +119,15 @@ describe("fetchCoaImage", () => {
     const err = await fetchCoaImage(URL_OK, { fetchImpl, rasterizePdf }).catch((e) => e);
     expect(err).toBeInstanceOf(CoaError);
     expect(err.kind).toBe("not-found");
+  });
+
+  it("fetches a private/LAN host directly", async () => {
+    const fetchImpl = vi.fn(async () => pngResponse());
+    const result = await fetchCoaImage("http://rastahp1.local/coa.png", {
+      fetchImpl,
+      rasterizePdf,
+    });
+    expect(result).toMatch(/^data:image\/png/);
+    expect(fetchImpl).toHaveBeenCalledOnce();
   });
 });

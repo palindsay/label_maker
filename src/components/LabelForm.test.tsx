@@ -17,16 +17,18 @@ const base: PeptideLabelInput = {
 function renderForm(overrides: Partial<Parameters<typeof LabelForm>[0]> = {}) {
   const onChange = vi.fn();
   const onImageSelected = vi.fn();
+  const onUrlSubmit = vi.fn();
   render(
     <LabelForm
       value={base}
       onChange={onChange}
       onImageSelected={onImageSelected}
+      onUrlSubmit={onUrlSubmit}
       busy={false}
       {...overrides}
     />,
   );
-  return { onChange, onImageSelected };
+  return { onChange, onImageSelected, onUrlSubmit };
 }
 
 describe("LabelForm", () => {
@@ -76,5 +78,25 @@ describe("LabelForm", () => {
   it("disables the photo control while busy", () => {
     renderForm({ busy: true });
     expect(screen.getByLabelText("Vial photo → auto-fill")).toBeDisabled();
+  });
+
+  it("submits a trimmed CoA/image URL on Fetch", async () => {
+    const { onUrlSubmit } = renderForm();
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "  https://coa.vendor.com/a.pdf  ",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Fetch" }));
+    expect(onUrlSubmit).toHaveBeenCalledWith("https://coa.vendor.com/a.pdf");
+  });
+
+  it("keeps Fetch disabled until a URL is entered", async () => {
+    renderForm();
+    expect(screen.getByRole("button", { name: "Fetch" })).toBeDisabled();
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "https://x.io/a.png",
+    );
+    expect(screen.getByRole("button", { name: "Fetch" })).toBeEnabled();
   });
 });

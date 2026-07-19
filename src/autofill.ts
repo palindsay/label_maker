@@ -97,3 +97,34 @@ export async function autofillFromPhoto(
 
   return { fields, coaUrl, coaFields, mismatches, notes, errors };
 }
+
+/** Capabilities for {@link autofillFromUrl}. */
+export interface UrlAutofillDeps {
+  /** Fetch + normalize a CoA/image URL to an image data URL. */
+  fetchCoaImage: (url: string) => Promise<string>;
+  /** Vision extraction of an image data URL. */
+  extractFromImage: (imageDataUrl: string) => Promise<ExtractedPeptide>;
+}
+
+/**
+ * Auto-fill from an operator-entered CoA/image URL: fetch it (image or PDF),
+ * read the peptide facts off it, and return them for the operator to confirm.
+ * A single authoritative source, so there is nothing to cross-check. Never
+ * throws — a fetch/read failure lands in `errors` with empty `fields`.
+ */
+export async function autofillFromUrl(url: string, deps: UrlAutofillDeps): Promise<AutofillResult> {
+  try {
+    const image = await deps.fetchCoaImage(url);
+    const fields = await deps.extractFromImage(image);
+    return { fields, coaUrl: url, coaFields: fields, mismatches: [], notes: [], errors: [] };
+  } catch (err) {
+    return {
+      fields: {},
+      coaUrl: null,
+      coaFields: null,
+      mismatches: [],
+      notes: [],
+      errors: [message(err, "Could not read the URL.")],
+    };
+  }
+}

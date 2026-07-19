@@ -41,7 +41,8 @@ One-way data flow around a single `PeptideLabelInput` held in `App`:
 
 ```
 App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
- ├─ LabelForm     controlled fields + vial-photo <input> -> onChange / onImageSelected
+ ├─ LabelForm     controlled fields + vial-photo <input> + CoA/image URL field
+ │                -> onChange / onImageSelected / onUrlSubmit
  └─ LabelPreview  renders the label at 40x14mm from input + derived dosing
 ```
 
@@ -60,13 +61,18 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   throws on unusable model output — it returns `{}`.
 - **`src/image.ts`** — `fileToDataUrl` (FileReader → base64 data URL for the vision request).
 - **`src/qr.ts`** — `decodeQrFromImageData` (pure `jsQR` wrapper; deterministic, not LLM-based).
-- **`src/coa.ts`** — Certificate of Analysis handling. `validateCoaUrl` enforces http(s) + blocks
-  loopback/private/link-local hosts (SSRF); `fetchCoaImage` tries a direct fetch, falls back to
-  the `/coa` proxy on CORS failure, dispatches by content-type (image passthrough, PDF →
-  injected `rasterizePdf`), caps size, and throws a typed `CoaError`. Pure/injectable and tested.
-- **`src/autofill.ts`** — `autofillFromPhoto` orchestrates photo → (QR decode ‖ vision) → CoA
-  fetch → CoA vision → merge + cross-check. CoA overrides the vial photo (more authoritative) and
-  disagreements are collected in `mismatches`. Never throws — failures go in `errors`.
+- **`src/coa.ts`** — Certificate of Analysis handling. `validateCoaUrl` enforces the http(s)
+  scheme only — **any host is allowed** (this runs on a trusted LAN where CoAs are often hosted on
+  private/`.local` addresses); the scheme check just keeps `file:`/`data:`/junk out of the fetch.
+  `fetchCoaImage` tries a direct fetch, falls back to the `/coa` proxy on CORS failure, dispatches
+  by content-type (image passthrough, PDF → injected `rasterizePdf`), caps size, and throws a
+  typed `CoaError`. Pure/injectable and tested. Serves both the QR path and the operator URL field.
+- **`src/autofill.ts`** — two orchestrators, both pure and never-throwing (failures go in
+  `errors`). `autofillFromPhoto`: photo → (QR decode ‖ vision) → CoA fetch → CoA vision → merge +
+  cross-check; CoA overrides the vial photo (more authoritative) and disagreements are collected
+  in `mismatches`. The QR may resolve to any URL (LAN included) pointing at a CoA image/PDF.
+  `autofillFromUrl`: operator-entered CoA/image URL → fetch → vision → fields (single authoritative
+  source, no cross-check). `App.ingest()` merges either result into the form.
 - **`src/browser.ts`** — browser-only glue that needs a real canvas / pdf.js worker
   (`decodeQrFromDataUrl`, `rasterizePdfToDataUrl`, pdf.js lazy-imported). Excluded from coverage;
   exercised by the build and live runs.
@@ -86,6 +92,11 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
 4. **The LLM is best-effort pre-fill, never a source of truth.** `parseExtractionContent`
    returns a *partial* that is merged into the form for the operator to confirm; it must keep
    degrading gracefully (empty object) rather than throwing.
+5. **CoA URLs are host-agnostic on a trusted LAN.** `validateCoaUrl` deliberately allows any host
+   (private/loopback/`.local` included) and checks the http(s) scheme only — both the operator URL
+   field and the QR-decoded URL fetch through the same relaxed path, so a vial QR pointing at a LAN
+   CoA resolves. The `/coa` dev/preview proxy is an intentional open fetch proxy; run it only on a
+   network you trust. If this app is ever exposed beyond the LAN, re-introduce host restrictions.
 
 ## LLM endpoint / networking
 
@@ -95,10 +106,13 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
 - Override the base URL with `VITE_LLM_BASE_URL` (see `.env.example`). Calling a host directly
   (not via the proxy) requires CORS on that server.
 - **CoA fetch** uses a second dev/preview proxy: `vite.config.ts`'s `coaProxyPlugin` serves
-  `/coa?url=<CoA URL>`, re-validates the (untrusted) URL server-side with `validateCoaUrl`, and
-  fetches it without CORS. `fetchCoaImage` tries the QR URL directly first and only falls back to
-  `/coa` on a CORS/network failure. Like `/v1`, the proxy exists only under `dev`/`preview` — a
-  static build is direct-fetch only.
+  `/coa?url=<CoA URL>`, re-validates the URL's scheme server-side with `validateCoaUrl`, and
+  fetches it (any host) without CORS. `fetchCoaImage` tries the URL directly first and only falls
+  back to `/coa` on a CORS/network failure. Like `/v1`, the proxy exists only under `dev`/`preview`
+  — a static build is direct-fetch only. The same `fetchCoaImage` serves both the QR path and the
+  operator's **CoA/image URL field**, and both accept LAN/private hosts. Since the dev/preview
+  server binds `0.0.0.0`, the proxy is effectively an open http(s) fetch proxy for anyone on the
+  LAN — acceptable only because it runs on a network you trust (see invariant #5).
 - **Model discovery is dynamic.** The endpoint's roster changes (it may serve Gemma 4 31B, a
   Qwen VL, LLaVA, …), so the app does not hardcode a model id. On mount it calls `listModels`
   (`GET /v1/models`) and `pickVisionModel` chooses one, in priority order: (1) a `VITE_LLM_MODEL`

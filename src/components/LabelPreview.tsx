@@ -1,3 +1,4 @@
+import type { Ref } from "react";
 import { mmToPx } from "../label/format";
 import {
   type Reconstitution,
@@ -12,6 +13,8 @@ type LabelPreviewProps = {
   label: PeptideLabelInput;
   /** Derived dosing, or null when the current input is invalid. */
   recon: Reconstitution | null;
+  /** Forwarded to the `.label-print` root so callers can rasterize it. */
+  ref?: Ref<HTMLDivElement>;
 };
 
 const DASH = "—";
@@ -34,7 +37,7 @@ function mlNumber(n: number): string {
  * with only the dosing and source facts that are actually needed. The
  * `.label-print` element is the only thing that reaches paper (see index.css).
  */
-export function LabelPreview({ label, recon }: LabelPreviewProps) {
+export function LabelPreview({ label, recon, ref }: LabelPreviewProps) {
   const style = {
     width: `${mmToPx(NELKO_LABEL_SIZE.widthMm)}px`,
     height: `${mmToPx(NELKO_LABEL_SIZE.heightMm)}px`,
@@ -57,7 +60,7 @@ export function LabelPreview({ label, recon }: LabelPreviewProps) {
   const manufacturer = label.manufacturer.trim();
 
   return (
-    <div className="label-print" style={style} aria-label="Label preview">
+    <div className="label-print" style={style} aria-label="Label preview" ref={ref}>
       <div className="lbl-head">
         <span className="lbl-name" style={{ fontSize: `${nameFontPt(name)}pt` }}>
           {name}

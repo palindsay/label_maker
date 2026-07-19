@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 import { reconstitution } from "../label/peptide";
 import type { PeptideLabelInput } from "../label/schema";
@@ -37,5 +38,12 @@ describe("LabelPreview", () => {
     const el = screen.getByLabelText("Label preview") as HTMLElement;
     expect(Number.parseFloat(el.style.width)).toBeCloseTo(151.18, 1);
     expect(Number.parseFloat(el.style.height)).toBeCloseTo(52.91, 1);
+  });
+
+  it("forwards a ref to the .label-print root", () => {
+    const ref = createRef<HTMLDivElement>();
+    render(<LabelPreview label={base} recon={reconstitution(base)} ref={ref} />);
+    expect(ref.current).toBe(screen.getByLabelText("Label preview"));
+    expect(ref.current).toHaveClass("label-print");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { autofillFromPhoto } from "./autofill";
+import { autofillFromPhoto, autofillFromUrl } from "./autofill";
 
 const PHOTO = "data:image/png;base64,PHOTO";
 const COA_IMG = "data:image/png;base64,COA";
@@ -130,5 +130,53 @@ describe("autofillFromPhoto", () => {
 
     expect(result.fields).toEqual({ peptideName: "TB-500", lot: "Z9" });
     expect(result.errors.join(" ")).toMatch(/photo unreadable/);
+  });
+});
+
+const URL_IN = "https://coa.vendor.com/lot/A1.pdf";
+
+describe("autofillFromUrl", () => {
+  it("fetches the URL, extracts, and returns the fields", async () => {
+    const d = {
+      fetchCoaImage: vi.fn(async () => COA_IMG),
+      extractFromImage: vi.fn(async () => ({ peptideName: "BPC-157", vialMg: 5, lot: "A1" })),
+    };
+
+    const result = await autofillFromUrl(URL_IN, d);
+
+    expect(d.fetchCoaImage).toHaveBeenCalledWith(URL_IN);
+    expect(d.extractFromImage).toHaveBeenCalledWith(COA_IMG);
+    expect(result.fields).toEqual({ peptideName: "BPC-157", vialMg: 5, lot: "A1" });
+    expect(result.coaUrl).toBe(URL_IN);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("records an error and leaves fields empty when the fetch fails", async () => {
+    const d = {
+      fetchCoaImage: vi.fn(async () => {
+        throw new Error("URL returned status 404");
+      }),
+      extractFromImage: vi.fn(async () => ({ peptideName: "X" })),
+    };
+
+    const result = await autofillFromUrl(URL_IN, d);
+
+    expect(result.fields).toEqual({});
+    expect(result.coaUrl).toBeNull();
+    expect(result.errors.join(" ")).toMatch(/status 404/);
+    expect(d.extractFromImage).not.toHaveBeenCalled();
+  });
+
+  it("returns empty fields (no error) when extraction finds nothing", async () => {
+    const d = {
+      fetchCoaImage: vi.fn(async () => COA_IMG),
+      extractFromImage: vi.fn(async () => ({})),
+    };
+
+    const result = await autofillFromUrl(URL_IN, d);
+
+    expect(result.fields).toEqual({});
+    expect(result.coaUrl).toBe(URL_IN);
+    expect(result.errors).toEqual([]);
   });
 });

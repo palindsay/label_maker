@@ -1,4 +1,4 @@
-import type { ChangeEvent } from "react";
+import { type ChangeEvent, useState } from "react";
 import {
   COMMON_VIAL_MG,
   PEPTIDE_PRESETS,
@@ -11,7 +11,9 @@ type LabelFormProps = {
   onChange: (next: PeptideLabelInput) => void;
   /** Called when the user picks a vial photo to auto-fill from. */
   onImageSelected: (file: File) => void;
-  /** True while an image is being read/extracted; disables the photo control. */
+  /** Called when the user submits a CoA/image URL to auto-fill from. */
+  onUrlSubmit: (url: string) => void;
+  /** True while an image/URL is being read/extracted; disables the controls. */
   busy: boolean;
 };
 
@@ -21,7 +23,9 @@ function numValue(n: number): number | string {
 }
 
 /** Controlled form for peptide vial + dosing details. Presentational only. */
-export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormProps) {
+export function LabelForm({ value, onChange, onImageSelected, onUrlSubmit, busy }: LabelFormProps) {
+  // Transient input buffer for the CoA/image URL — not part of the label data.
+  const [url, setUrl] = useState("");
   const setText =
     (key: "peptideName" | "lot" | "dateReconstituted" | "manufacturer") =>
     (e: ChangeEvent<HTMLInputElement>) =>
@@ -53,6 +57,11 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
     if (file) onImageSelected(file);
   };
 
+  const submitUrl = () => {
+    const trimmed = url.trim();
+    if (trimmed) onUrlSubmit(trimmed);
+  };
+
   const amountSelectValue = (COMMON_VIAL_MG as readonly number[]).includes(value.vialMg)
     ? String(value.vialMg)
     : "custom";
@@ -63,6 +72,30 @@ export function LabelForm({ value, onChange, onImageSelected, busy }: LabelFormP
         Vial photo → auto-fill
         <input type="file" accept="image/*" onChange={pickImage} disabled={busy} />
       </label>
+
+      <div className="photo">
+        <span className="amount-title">CoA / image URL → auto-fill</span>
+        <div className="url-row">
+          <input
+            type="url"
+            inputMode="url"
+            aria-label="CoA / image URL → auto-fill"
+            placeholder="https://…/coa.pdf"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                submitUrl();
+              }
+            }}
+            disabled={busy}
+          />
+          <button type="button" onClick={submitUrl} disabled={busy || url.trim() === ""}>
+            Fetch
+          </button>
+        </div>
+      </div>
 
       <label>
         Preset

@@ -23,11 +23,12 @@ interface ProxyRes {
 }
 
 /**
- * Same-origin `/coa?url=<CoA URL>` proxy. The CoA URL comes from an untrusted
- * QR code, so it is re-validated here (scheme + SSRF host checks) before the
- * dev/preview server fetches it. This runs server-side, so it sidesteps the
- * browser CORS that blocks a direct cross-origin CoA fetch. Not present in a
- * static production build (direct fetch only, like /v1).
+ * Same-origin `/coa?url=<CoA URL>` proxy. The URL is re-validated here (http/https
+ * scheme only) before the dev/preview server fetches it. This runs server-side, so
+ * it sidesteps the browser CORS that blocks a direct cross-origin CoA fetch. Any
+ * host is allowed — this is an intentional open fetch proxy for the trusted LAN, so
+ * only run dev/preview on a network you trust. Not present in a static production
+ * build (direct fetch only, like /v1).
  */
 function coaProxyPlugin(): Plugin {
   const handler = async (req: ProxyReq, res: ProxyRes, next: () => void) => {

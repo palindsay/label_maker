@@ -1,12 +1,13 @@
 /**
- * Fetch and normalize a Certificate of Analysis (CoA) referenced by a QR code.
+ * Fetch and normalize a Certificate of Analysis (CoA) — either entered as a URL
+ * or decoded from a vial's QR code.
  *
- * The CoA URL comes from an untrusted QR payload, so it is strictly validated
- * (scheme + SSRF host checks) before any request. Because vendor hosts rarely
- * send CORS headers, `fetchCoaImage` tries a direct fetch first and falls back
- * to the same-origin `/coa` proxy (see vite.config.ts). PDFs are rasterized to
- * an image via the injected `rasterizePdf` so the result is always an image
- * data URL ready for the vision model.
+ * The app runs on a trusted private LAN, so URLs are validated for scheme only
+ * (http/https) — any host is allowed, including LAN/private addresses where CoAs
+ * are often hosted. Because vendor hosts rarely send CORS headers, `fetchCoaImage`
+ * tries a direct fetch first and falls back to the same-origin `/coa` proxy (see
+ * vite.config.ts). PDFs are rasterized to an image via the injected `rasterizePdf`
+ * so the result is always an image data URL ready for the vision model.
  */
 
 export type CoaFailureKind =
@@ -30,29 +31,13 @@ export class CoaError extends Error {
   }
 }
 
-// IPv4 ranges that must never be fetched from a QR-supplied URL.
-const PRIVATE_V4 = [
-  /^127\./,
-  /^10\./,
-  /^192\.168\./,
-  /^169\.254\./,
-  /^172\.(1[6-9]|2\d|3[01])\./,
-  /^0\./,
-];
-
-function isBlockedHost(hostname: string): boolean {
-  // URL.hostname keeps IPv6 brackets (e.g. "[::1]"); strip them to compare.
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (host === "localhost" || host.endsWith(".local") || host.endsWith(".localhost")) return true;
-  if (host === "0.0.0.0" || host === "::1" || host === "::") return true;
-  // IPv6 unique-local (fc00::/7) and link-local (fe80::/10).
-  if (host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) return true;
-  return PRIVATE_V4.some((re) => re.test(host));
-}
-
 export type UrlValidation = { ok: true; url: string } | { ok: false; reason: string };
 
-/** Validate a QR-supplied CoA URL: http(s) only, no loopback/private/link-local. */
+/**
+ * Validate a CoA/image URL: http(s) scheme only. Any host is allowed (the app
+ * runs on a trusted private LAN, so LAN/private CoA hosts must resolve). The
+ * scheme check keeps `file:`/`data:`/junk out of the fetch path.
+ */
 export function validateCoaUrl(raw: string): UrlValidation {
   let parsed: URL;
   try {
@@ -62,9 +47,6 @@ export function validateCoaUrl(raw: string): UrlValidation {
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return { ok: false, reason: `Unsupported URL scheme "${parsed.protocol}"` };
-  }
-  if (isBlockedHost(parsed.hostname)) {
-    return { ok: false, reason: `Refusing to fetch a private/loopback host "${parsed.hostname}"` };
   }
   return { ok: true, url: parsed.toString() };
 }
@@ -98,7 +80,7 @@ function bytesToBase64(bytes: Uint8Array): string {
 export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise<string> {
   const validation = validateCoaUrl(rawUrl);
   if (!validation.ok) {
-    throw new CoaError("invalid-url", `The QR code URL can't be used: ${validation.reason}.`);
+    throw new CoaError("invalid-url", `The URL can't be used: ${validation.reason}.`);
   }
 
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -111,8 +93,9 @@ export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise
   try {
     response = await fetchImpl(url);
   } catch {
+    const proxyUrl = `${proxyBase}?url=${encodeURIComponent(url)}`;
     try {
-      response = await fetchImpl(`${proxyBase}?url=${encodeURIComponent(url)}`);
+      response = await fetchImpl(proxyUrl);
     } catch (proxyErr) {
       throw new CoaError(
         "unreachable",

@@ -47,3 +47,65 @@ export async function rasterizePdfToDataUrl(bytes: Uint8Array, scale = 2): Promi
   await page.render({ canvas, canvasContext: ctx, viewport }).promise;
   return canvas.toDataURL("image/png");
 }
+
+/**
+ * Rasterize a label DOM node to a crisp PNG blob. Captures the node at its own
+ * layout size (ancestor `zoom`/`transform` do not apply — the node is cloned),
+ * drops the screen-only dashed cut-guide border, and renders at high pixel
+ * density so the tiny 40x14mm label stays sharp (~750dpi).
+ */
+export async function labelToPngBlob(node: HTMLElement): Promise<Blob> {
+  // Lazy-load html-to-image so it is only fetched when the user exports.
+  const { toBlob } = await import("html-to-image");
+  const blob = await toBlob(node, {
+    pixelRatio: 8,
+    backgroundColor: "#fff",
+    style: { border: "none", margin: "0" },
+  });
+  if (!blob) throw new Error("Could not render the label to an image");
+  return blob;
+}
+
+/** Whether the browser can write an image to the clipboard (needs HTTPS/localhost). */
+function canWriteImageToClipboard(): boolean {
+  return (
+    window.isSecureContext &&
+    typeof ClipboardItem !== "undefined" &&
+    typeof navigator.clipboard?.write === "function"
+  );
+}
+
+/** Trigger a browser download of a blob under `filename`. */
+function downloadBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * Render the label node to a PNG and deliver it: copy to the clipboard when the
+ * context allows it (HTTPS/localhost), otherwise fall back to downloading the
+ * file (e.g. served over plain http on the LAN). Returns which path was taken.
+ */
+export async function exportLabelPng(
+  node: HTMLElement,
+  filename: string,
+): Promise<"copied" | "downloaded"> {
+  const blob = await labelToPngBlob(node);
+  if (canWriteImageToClipboard()) {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      return "copied";
+    } catch {
+      // Permission denied or unsupported — fall through to a download.
+    }
+  }
+  downloadBlob(blob, filename);
+  return "downloaded";
+}

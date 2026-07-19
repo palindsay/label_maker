@@ -106,6 +106,23 @@ body {
   background: #fafafa;
 }
 
+.label-form .url-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: stretch;
+  margin-top: 0.2rem;
+}
+
+.label-form .url-row input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.label-form .url-row button {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
 .status {
   color: #555;
   font-style: italic;
@@ -123,6 +140,13 @@ body {
   font-size: 0.85rem;
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 button {
   font: inherit;
   padding: 0.5rem 1rem;
@@ -132,6 +156,11 @@ button {
   color: #fff;
   cursor: pointer;
   margin-top: 0.5rem;
+}
+
+.actions button {
+  flex: 1 1 auto;
+  margin-top: 0;
 }
 
 button:disabled {
@@ -148,10 +177,11 @@ button:disabled {
   border-radius: 8px;
 }
 
-/* Screen-only zoom so the tiny label is legible; removed for print. */
+/* Screen-only magnification so the tiny label is legible; reset for print.
+   `zoom` (not `transform: scale`) so the enlarged label reserves real layout
+   space — otherwise its painted overflow is clipped by `.stage` on mobile. */
 .preview-frame {
-  transform: scale(3.5);
-  transform-origin: top center;
+  zoom: 3.5;
 }
 
 /* The physical label: exactly 40mm x 14mm, black-on-white for direct thermal.
@@ -251,7 +281,7 @@ button:disabled {
   }
 
   .preview-frame {
-    transform: none;
+    zoom: 1;
   }
 
   .label-print {
@@ -273,13 +303,14 @@ button:disabled {
   }
 
   .stage {
-    /* The preview is transform-scaled, so clip any visual overflow. */
     padding: 2rem 0.5rem;
-    overflow: hidden;
+    /* `zoom` reserves layout space, so no clipping is needed; allow a scroll
+       as a safety valve if the enlarged label exceeds a very narrow viewport. */
+    overflow-x: auto;
   }
 
   .preview-frame {
-    transform: scale(2.3);
+    zoom: 2.1;
   }
 
   /* Comfortable tap targets; 16px inputs stop iOS from zooming on focus. */
@@ -299,7 +330,7 @@ button:disabled {
 
 @media (max-width: 400px) {
   .preview-frame {
-    transform: scale(2);
+    zoom: 1.9;
   }
 
   .label-form .row2,

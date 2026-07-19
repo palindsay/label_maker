@@ -2,12 +2,14 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
-import { decodeQrFromDataUrl } from "./browser";
+import { decodeQrFromDataUrl, exportLabelPng } from "./browser";
 import { fetchCoaImage } from "./coa";
 import { fileToDataUrl } from "./image";
 import { extractPeptideFromImage, listModels } from "./llm/client";
 
-vi.mock("./image", () => ({
+// Mock only the file-reading side effect; keep the pure labelPngFilename real.
+vi.mock("./image", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./image")>()),
   fileToDataUrl: vi.fn(async () => "data:image/png;base64,x"),
 }));
 
@@ -15,6 +17,7 @@ vi.mock("./image", () => ({
 vi.mock("./browser", () => ({
   decodeQrFromDataUrl: vi.fn(async () => null),
   rasterizePdfToDataUrl: vi.fn(async () => "data:image/png;base64,PDF"),
+  exportLabelPng: vi.fn(async () => "copied"),
 }));
 vi.mock("./coa", () => ({
   fetchCoaImage: vi.fn(async () => "data:image/png;base64,COA"),
@@ -38,6 +41,7 @@ afterEach(() => {
   vi.mocked(listModels).mockResolvedValue(DEFAULT_MODELS);
   vi.mocked(decodeQrFromDataUrl).mockResolvedValue(null);
   vi.mocked(fetchCoaImage).mockResolvedValue("data:image/png;base64,COA");
+  vi.mocked(exportLabelPng).mockResolvedValue("copied");
 });
 
 /** Render and wait for model discovery to settle. */
@@ -56,6 +60,60 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Print" }));
     expect(print).toHaveBeenCalledOnce();
+  });
+
+  it("copies the label image and confirms via a note", async () => {
+    await renderApp();
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy image" }));
+
+    expect(exportLabelPng).toHaveBeenCalledOnce();
+    expect(vi.mocked(exportLabelPng).mock.calls[0]?.[1]).toBe("bpc-157-label.png");
+    await waitFor(() =>
+      expect(screen.getByText("Copied label image to the clipboard.")).toBeInTheDocument(),
+    );
+  });
+
+  it("explains the HTTPS fallback when the image is downloaded instead", async () => {
+    vi.mocked(exportLabelPng).mockResolvedValueOnce("downloaded");
+    await renderApp();
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy image" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/downloaded the image instead/)).toBeInTheDocument(),
+    );
+  });
+
+  it("auto-fills fields from a CoA/image URL", async () => {
+    await renderApp();
+
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "https://coa.vendor.com/a.pdf",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    expect(fetchCoaImage).toHaveBeenCalledWith(
+      "https://coa.vendor.com/a.pdf",
+      expect.objectContaining({ rasterizePdf: expect.any(Function) }),
+    );
+    await waitFor(() => expect(screen.getByDisplayValue("TB-500")).toBeInTheDocument());
+    expect(screen.getByText(/Read from URL/)).toBeInTheDocument();
+  });
+
+  it("surfaces an error when the URL fetch fails", async () => {
+    vi.mocked(fetchCoaImage).mockRejectedValueOnce(new Error("The URL returned status 404."));
+    await renderApp();
+
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "https://coa.vendor.com/missing.pdf",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    await waitFor(() => expect(screen.getByText(/status 404/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
   });
 
   it("blocks printing and surfaces an error when the name is empty", async () => {
