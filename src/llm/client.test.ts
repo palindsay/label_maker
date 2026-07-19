@@ -38,6 +38,20 @@ describe("buildVisionRequest", () => {
     expect(prompt).toContain("manufacturer");
     expect(prompt).toContain("certificate of analysis");
   });
+
+  it("tells the model where to find the peptide amount on a CoA", () => {
+    const body = buildVisionRequest(IMG, CFG);
+    const prompt = body.messages
+      .flatMap((m) =>
+        typeof m.content === "string"
+          ? [m.content]
+          : m.content.filter((p) => p.type === "text").map((p) => (p as { text: string }).text),
+      )
+      .join(" ")
+      .toLowerCase();
+    // CoAs phrase the amount as content/quantity/label-claim, not "10mg".
+    expect(prompt).toMatch(/content|quantity|label claim|per vial/);
+  });
 });
 
 describe("parseExtractionContent", () => {

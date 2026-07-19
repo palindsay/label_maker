@@ -108,7 +108,9 @@ const USER_PROMPT =
   "Certificate of Analysis / lab test report: " +
   '`peptideName` (string, the peptide\'s name, e.g. "BPC-157" or "Ipamorelin"; on a report ' +
   "prefer the full name from the results table over an abbreviated sample name), " +
-  '`vialMg` (number, the labeled total milligrams of peptide in the vial, e.g. 10 from "10mg"), ' +
+  "`vialMg` (number, the total milligrams of peptide in the vial — on a vial label the printed " +
+  'amount like "10mg"; on a Certificate of Analysis the peptide content / quantity / net peptide / ' +
+  'label claim / mg per vial, e.g. 10 from "10 mg". Prefer the CoA amount when reading a report), ' +
   "`manufacturer` (string, the brand / vendor / manufacturer / supplier; on a report use the " +
   '"Manufacturer" field, or "Client" if there is no separate manufacturer, e.g. "utherpeptide.com"), ' +
   '`lot` (string, the lot or batch code, e.g. "IP10-0106"), ' +

@@ -102,6 +102,22 @@ describe("App", () => {
     expect(screen.getByText(/Read from URL/)).toBeInTheDocument();
   });
 
+  it("uses the CoA vial mg over the dropdown default", async () => {
+    // Form starts at the BPC-157 default of 10 mg; the CoA reports 20 mg.
+    vi.mocked(extractPeptideFromImage).mockResolvedValueOnce({ peptideName: "BPC-157", vialMg: 20 });
+    await renderApp();
+    expect(screen.getByLabelText("Vial mg")).toHaveValue(10);
+
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "https://coa.vendor.com/a.pdf",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    // CoA amount wins over the 10 mg default.
+    await waitFor(() => expect(screen.getByLabelText("Vial mg")).toHaveValue(20));
+  });
+
   it("surfaces an error when the URL fetch fails", async () => {
     vi.mocked(fetchCoaImage).mockRejectedValueOnce(new Error("The URL returned status 404."));
     await renderApp();
