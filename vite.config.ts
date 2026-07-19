@@ -3,10 +3,11 @@ import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
 import { validateCoaUrl } from "./src/coa";
 
-// OpenAI-compatible multimodal endpoint. The browser calls the same-origin
-// "/v1" path and the dev/preview server proxies it here, avoiding CORS.
-// Edit this to point at your endpoint.
-const LLM_TARGET = "http://rastalinuxai.local:8080";
+// OpenAI-compatible multimodal endpoint. The app calls its base URL directly
+// (the in-app "LLM endpoint" field, default http://rastalinuxai.local:8081/v1).
+// This same-origin "/v1" proxy is a CORS-free fallback: set the endpoint field
+// (or VITE_LLM_BASE_URL) to "/v1" to route through it. Edit the target here.
+const LLM_TARGET = "http://rastalinuxai.local:8081";
 
 const proxy = {
   "/v1": { target: LLM_TARGET, changeOrigin: true },

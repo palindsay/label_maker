@@ -4,12 +4,14 @@ import { z } from "zod";
  * Thin client for an OpenAI-compatible multimodal (vision) endpoint, used to
  * read peptide facts off a photo of a vial or its supplier label/COA.
  *
- * By default it targets "/v1", which the Vite dev/preview server proxies to the
- * configured host (see vite.config.ts) — this keeps requests same-origin and
- * avoids browser CORS. Override via VITE_LLM_BASE_URL to call a host directly.
+ * The base URL is configurable at runtime (the in-app "LLM endpoint" field) and
+ * defaults to the LAN inference server. The browser calls it directly, so the
+ * endpoint must send CORS headers (LAN inference servers typically do). Set
+ * `/v1` (or `VITE_LLM_BASE_URL=/v1`) to instead route via the same-origin Vite
+ * proxy, for an endpoint without CORS.
  */
 export interface LlmConfig {
-  /** Base URL ending in "/v1" (or a same-origin proxy path). */
+  /** Base URL ending in "/v1" (absolute, or a same-origin proxy path). */
   baseUrl: string;
   /** Model name sent to the server (many local servers ignore it). */
   model: string;
@@ -19,8 +21,11 @@ export interface LlmConfig {
 
 const env = import.meta.env;
 
+/** Default LAN inference endpoint (OpenAI-compatible, CORS-enabled). */
+export const DEFAULT_LLM_BASE_URL = "http://rastalinuxai.local:8081/v1";
+
 export const DEFAULT_LLM_CONFIG: LlmConfig = {
-  baseUrl: env.VITE_LLM_BASE_URL ?? "/v1",
+  baseUrl: env.VITE_LLM_BASE_URL ?? DEFAULT_LLM_BASE_URL,
   // Empty means "auto-discover": the endpoint's model roster changes, so rather
   // than hardcode an id we list `GET /v1/models` and pick one at runtime. Set
   // VITE_LLM_MODEL to force a specific id (used as a preference if present).

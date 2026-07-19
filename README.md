@@ -80,9 +80,13 @@ Three ways to pre-fill the form (all best-effort — you confirm before printing
 
 Details:
 
-- The browser calls same-origin `/v1`; Vite proxies it to the endpoint in `vite.config.ts`
-  (`LLM_TARGET`, default `http://rastalinuxai.local:8080`) — this avoids CORS.
-- Override the base URL / model via `VITE_LLM_BASE_URL` / `VITE_LLM_MODEL` (see `.env.example`).
+- **LLM endpoint** and **Model** are chosen in the UI. The endpoint field defaults to
+  `http://rastalinuxai.local:8081/v1`; the Model dropdown lists every model the endpoint serves
+  (any is selectable). Changing the endpoint re-discovers its models.
+- The browser calls the endpoint **directly**, so it must send CORS headers (LAN inference servers
+  typically do). For an endpoint without CORS, set the field to `/v1` to route through the Vite
+  `/v1` proxy (`LLM_TARGET` in `vite.config.ts`). Build-time defaults: `VITE_LLM_BASE_URL` /
+  `VITE_LLM_MODEL`.
 - CoA fetch (`/coa` proxy) validates the http(s) scheme only; any host is allowed (trusted LAN).
 
 ## Export the label as an image

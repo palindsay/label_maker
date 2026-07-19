@@ -110,12 +110,14 @@ scripts/uninstall-service.sh             # stop, disable, remove
 
 Point the app at an OpenAI-compatible multimodal endpoint, then let it read a vial photo.
 
-1. **Set the endpoint.** Edit `LLM_TARGET` in `vite.config.ts` (default
-   `http://rastalinuxai.local:8080`). The browser calls same-origin `/v1`, which the dev/preview
-   server proxies there — this avoids CORS. Restart `npm run dev` after editing.
-2. **Pick the model.** On load the app lists the endpoint's models and auto-selects a
-   vision-capable one; use the **Vision model** dropdown to switch. No model id is hardcoded.
-   *(Optional: force one with `VITE_LLM_MODEL` — see `.env.example`. Leave unset to auto-pick.)*
+1. **Set the endpoint.** Type it in the **LLM endpoint** field (default
+   `http://rastalinuxai.local:8081/v1`); it commits on blur/Enter and re-discovers models. The
+   browser calls it **directly**, so the endpoint must allow CORS (LAN inference servers usually
+   do). No CORS? Set the field to `/v1` to route through the dev/preview proxy (`LLM_TARGET` in
+   `vite.config.ts`).
+2. **Pick the model.** On load (and whenever the endpoint changes) the app lists the endpoint's
+   models and auto-selects a vision-capable one; use the **Model** dropdown to pick any of them.
+   No model id is hardcoded. *(Optional build-time default: `VITE_LLM_MODEL`.)*
 3. **Upload a photo.** Use **Vial photo → auto-fill**. Extracted fields (peptide, mg, lot) are
    merged into the form for you to **confirm** — the LLM is best-effort, never authoritative.
 4. If the endpoint has no vision model / is unreachable, the app says so and you just keep
@@ -165,7 +167,7 @@ endpoint; it degrades gracefully if no vision model is present.
 | Symptom | Fix |
 | --- | --- |
 | Label prints wrong size | Select **40 × 14 mm** media and **100% / actual size** (disable "fit to page" / scaling). |
-| "Model discovery: …" / auto-fill unavailable | Endpoint down or wrong `LLM_TARGET`. Check it's running: `curl http://<host>:<port>/v1/models`. Restart `npm run dev` after editing `vite.config.ts`. |
+| "Model discovery: …" / auto-fill unavailable | Wrong URL in the **LLM endpoint** field or endpoint down. Check it: `curl http://<host>:<port>/v1/models`. If it's up but the browser can't reach it, the endpoint likely lacks **CORS** — set the field to `/v1` to use the proxy (and point `LLM_TARGET` at the host). |
 | Photo fills nothing | Selected model can't see images — pick another from the **Vision model** dropdown, or the photo is unreadable. |
 | CoA won't load | Vendor host blocks CORS **and** you're on a static build (no `/coa` proxy). Run via `npm run dev`/`preview`/`serve`. The link must point at the image/PDF itself (not an HTML page). |
 | Auto-fill features missing entirely | They only appear with the dev/preview server running; a bare static file host has no `/v1` or `/coa` proxy. |

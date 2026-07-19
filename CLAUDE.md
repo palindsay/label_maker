@@ -100,11 +100,16 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
 
 ## LLM endpoint / networking
 
-- Browser calls same-origin **`/v1`**; Vite (`server.proxy` + `preview.proxy` in
-  `vite.config.ts`) forwards to `LLM_TARGET` (default `http://rastalinuxai.local:8080`). This
-  sidesteps CORS. Change the target by editing `LLM_TARGET` in `vite.config.ts`.
-- Override the base URL with `VITE_LLM_BASE_URL` (see `.env.example`). Calling a host directly
-  (not via the proxy) requires CORS on that server.
+- The base URL is set at runtime in the **in-app "LLM endpoint" field** (App state `baseUrl`,
+  committed on blur/Enter), defaulting to `DEFAULT_LLM_BASE_URL`
+  (`http://rastalinuxai.local:8081/v1`; overridable at build time via `VITE_LLM_BASE_URL`).
+  Changing it re-runs model discovery. The browser calls this URL **directly**, so the endpoint
+  must send CORS headers — LAN inference servers typically do (verified: `Access-Control-Allow-*`
+  on `GET /v1/models` and the `OPTIONS` preflight).
+- **`/v1` proxy (CORS-free fallback).** Vite (`server.proxy` + `preview.proxy`) forwards same-origin
+  `/v1` to `LLM_TARGET` (`http://rastalinuxai.local:8081`). Set the endpoint field (or
+  `VITE_LLM_BASE_URL`) to `/v1` to route through it — use this for an endpoint without CORS. Exists
+  only under `dev`/`preview`.
 - **CoA fetch** uses a second dev/preview proxy: `vite.config.ts`'s `coaProxyPlugin` serves
   `/coa?url=<CoA URL>`, re-validates the URL's scheme server-side with `validateCoaUrl`, and
   fetches it (any host) without CORS. `fetchCoaImage` tries the URL directly first and only falls
@@ -118,8 +123,8 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
   (`GET /v1/models`) and `pickVisionModel` chooses one, in priority order: (1) a `VITE_LLM_MODEL`
   preference if the endpoint serves it, (2) the first model the endpoint flags
   `capabilities.vision: true`, (3) the first model whose name looks vision-capable
-  (`VISION_HINTS`), (4) the first model. The **in-app "Vision model" dropdown** lets the user
-  switch among discovered models, and `extractPeptideFromImage` auto-discovers when
+  (`VISION_HINTS`), (4) the first model. The **in-app "Model" dropdown** lists *all* discovered
+  models (any is selectable, not just vision-flagged), and `extractPeptideFromImage` auto-discovers when
   `config.model` is empty. The capability flag is authoritative when present; the name heuristic
   is the fallback when it isn't, and the user override is the final safety net. `VITE_LLM_MODEL`
   is optional (leave unset to auto-pick).

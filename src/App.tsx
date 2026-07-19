@@ -35,15 +35,24 @@ export function App() {
   const [imageNote, setImageNote] = useState<string | null>(null);
   const labelRef = useRef<HTMLDivElement>(null);
 
+  // OpenAI-compatible endpoint base URL. Editable in the UI; `endpointInput` is
+  // the text buffer, `baseUrl` the committed value that drives discovery/calls.
+  const [endpointInput, setEndpointInput] = useState<string>(DEFAULT_LLM_CONFIG.baseUrl);
+  const [baseUrl, setBaseUrl] = useState<string>(DEFAULT_LLM_CONFIG.baseUrl);
+  const commitEndpoint = () => setBaseUrl(endpointInput.trim() || DEFAULT_LLM_CONFIG.baseUrl);
+
   // Discovered models + the one selected for image auto-fill. The endpoint's
   // roster changes, so we list it at runtime rather than hardcoding an id.
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [model, setModel] = useState<string>("");
   const [discoverError, setDiscoverError] = useState<string | null>(null);
 
+  // (Re)discover the endpoint's models whenever the committed base URL changes.
   useEffect(() => {
     let cancelled = false;
-    listModels()
+    setModels([]);
+    setDiscoverError(null);
+    listModels({ ...DEFAULT_LLM_CONFIG, baseUrl })
       .then((discovered) => {
         if (cancelled) return;
         setModels(discovered);
@@ -56,14 +65,14 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [baseUrl]);
 
   const parsed = peptideLabelSchema.safeParse(label);
   const recon = parsed.success ? reconstitution(parsed.data) : null;
   const errorMessage = parsed.success ? null : parsed.error.issues[0]?.message;
 
   const extractFromImage = (image: string) =>
-    extractPeptideFromImage(image, { ...DEFAULT_LLM_CONFIG, model });
+    extractPeptideFromImage(image, { ...DEFAULT_LLM_CONFIG, baseUrl, model });
 
   /** Merge an autofill result into the form and surface a confirmation note. */
   function ingest(result: AutofillResult, source: "photo" | "url") {
@@ -157,7 +166,25 @@ export function App() {
         <p className="subtitle">Nelko 40 × 14 mm · 3 ml vials · U-100 dosing</p>
 
         <label className="model-picker">
-          Vision model
+          LLM endpoint
+          <input
+            type="url"
+            inputMode="url"
+            value={endpointInput}
+            placeholder="http://host:port/v1"
+            onChange={(e) => setEndpointInput(e.target.value)}
+            onBlur={commitEndpoint}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                commitEndpoint();
+              }
+            }}
+          />
+        </label>
+
+        <label className="model-picker">
+          Model
           <select
             value={model}
             onChange={(e) => setModel(e.target.value)}

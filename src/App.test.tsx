@@ -126,10 +126,43 @@ describe("App", () => {
 
   it("discovers models from the endpoint and defaults to a vision model", async () => {
     await renderApp();
-    const select = screen.getByLabelText("Vision model") as HTMLSelectElement;
+    const select = screen.getByLabelText("Model") as HTMLSelectElement;
 
     await waitFor(() => expect(select.value).toBe("gemma-4-31b"));
     expect(screen.getByRole("option", { name: "qwen3.6-27b" })).toBeInTheDocument();
+  });
+
+  it("defaults the endpoint field and rediscovers models when it changes", async () => {
+    await renderApp();
+    const endpoint = screen.getByLabelText("LLM endpoint") as HTMLInputElement;
+    expect(endpoint.value).toBe("http://rastalinuxai.local:8081/v1");
+
+    vi.mocked(listModels).mockResolvedValueOnce([{ id: "custom-vlm" }]);
+    await userEvent.clear(endpoint);
+    await userEvent.type(endpoint, "http://other.local:9000/v1{Enter}");
+
+    await waitFor(() =>
+      expect(listModels).toHaveBeenCalledWith(
+        expect.objectContaining({ baseUrl: "http://other.local:9000/v1" }),
+      ),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "custom-vlm" })).toBeInTheDocument(),
+    );
+  });
+
+  it("passes the endpoint base URL through to image extraction", async () => {
+    await renderApp();
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    await waitFor(() =>
+      expect(extractPeptideFromImage).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ baseUrl: "http://rastalinuxai.local:8081/v1" }),
+      ),
+    );
   });
 
   it("keeps working when model discovery fails", async () => {
