@@ -127,8 +127,15 @@ export const PEPTIDE_PRESETS = {
   "PT-141 (Bremelanotide)": { name: "PT-141", vialMg: 10, bacWaterMl: 2, doseMcg: 1750 }, // guide 1.75 mg (FDA Vyleesi)
   "Melanotan II": { name: "Melanotan II", vialMg: 10, bacWaterMl: 2, doseMcg: 250 }, // guide load 0.25–1 mg → 0.5–1 mg; ⚠ melanoma/priapism
 
-  // Blends — dosed by TOTAL blend mass (not in the guide; components documented separately)
-  "KLOW-80 (blend)": { name: "KLOW-80", vialMg: 80, bacWaterMl: 4, doseMcg: 500 }, // GHK-Cu50+BPC10+TB10+KPV10
+  // Blends — dosed by TOTAL blend mass (community/anecdotal; ratios, vial sizes and
+  // reconstitution vary by supplier, so per-unit dose varies — always read the vial).
+  // GH-secretagogue blends are really dosed per-component; the total shown is derived.
+  "Wolverine (BPC-157 + TB-500)": { name: "Wolverine", vialMg: 20, bacWaterMl: 2, doseMcg: 500 }, // BPC10+TB10; ~250 mcg each 1×/day
+  "GLOW (GHK-Cu + BPC + TB)": { name: "GLOW", vialMg: 70, bacWaterMl: 3, doseMcg: 2330 }, // GHK50+BPC10+TB10 (5:1:1); ~10 u/day
+  "KLOW-80 (blend)": { name: "KLOW-80", vialMg: 80, bacWaterMl: 3, doseMcg: 2670 }, // GHK50+KPV10+BPC10+TB10; ~10 u/day (2.7–8 mg range)
+  "CJC-1295 + Ipamorelin": { name: "CJC-1295/Ipa", vialMg: 10, bacWaterMl: 2, doseMcg: 500 }, // CJC5+Ipa5; 250 mcg each 1–2×/day
+  "Tesamorelin + Ipamorelin": { name: "Tesa/Ipamorelin", vialMg: 10, bacWaterMl: 2, doseMcg: 1300 }, // Tesa5+Ipa5; ~1 mg tesa+300 mcg ipa/day
+  "Sermorelin + Ipamorelin": { name: "Sermorelin/Ipa", vialMg: 10, bacWaterMl: 2, doseMcg: 200 }, // Sermo5+Ipa5; ~100–200 mcg/day, split
   "MITOPRIME (blend)": { name: "MITOPRIME", vialMg: 120, bacWaterMl: 4, doseMcg: 1000 }, // NAD⁺100+MOTS-c10+5A1MQ10
 } as const satisfies Record<string, PeptidePreset>;
 
