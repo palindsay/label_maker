@@ -4,6 +4,7 @@ import { decodeQrFromDataUrl, exportLabelPng, rasterizePdfToDataUrl } from "./br
 import { fetchCoaImage } from "./coa";
 import { LabelForm } from "./components/LabelForm";
 import { LabelPreview } from "./components/LabelPreview";
+import { NoticeBanner } from "./components/NoticeBanner";
 import { fileToDataUrl, labelPngFilename } from "./image";
 import { reconstitution } from "./label/peptide";
 import { PEPTIDE_PRESETS, type PeptideLabelInput, peptideLabelSchema } from "./label/schema";
@@ -14,6 +15,7 @@ import {
   listModels,
   pickVisionModel,
 } from "./llm/client";
+import { type Notice, buildNotices } from "./notices";
 
 const BPC = PEPTIDE_PRESETS["BPC-157"];
 const INITIAL: PeptideLabelInput = {
@@ -29,10 +31,10 @@ const INITIAL: PeptideLabelInput = {
 export function App() {
   const [label, setLabel] = useState<PeptideLabelInput>(INITIAL);
   const [busy, setBusy] = useState(false);
-  const [llmError, setLlmError] = useState<string | null>(null);
-  const [llmNote, setLlmNote] = useState<string | null>(null);
-  const [mismatches, setMismatches] = useState<string[]>([]);
-  const [imageNote, setImageNote] = useState<string | null>(null);
+  // Notices from the last auto-fill (success/warning/error), and a separate
+  // one for the image export, so the two flows don't clobber each other.
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [imageNotice, setImageNotice] = useState<Notice | null>(null);
   const labelRef = useRef<HTMLDivElement>(null);
 
   // OpenAI-compatible endpoint base URL. Editable in the UI; `endpointInput` is
@@ -74,34 +76,19 @@ export function App() {
   const extractFromImage = (image: string) =>
     extractPeptideFromImage(image, { ...DEFAULT_LLM_CONFIG, baseUrl, model });
 
-  /** Merge an autofill result into the form and surface a confirmation note. */
+  /** Merge an autofill result into the form and surface typed notices. */
   function ingest(result: AutofillResult, source: "photo" | "url") {
     // `purity` isn't a label field — surface it in the note, not the form.
-    const { purity, ...labelFields } = result.fields;
-    const filled = Object.keys(labelFields);
-    if (filled.length > 0) {
+    const { purity: _purity, ...labelFields } = result.fields;
+    if (Object.keys(labelFields).length > 0) {
       setLabel((prev) => ({ ...prev, ...labelFields }));
     }
-
-    const parts: string[] = [];
-    if (filled.length > 0) parts.push(`Filled: ${filled.join(", ")}`);
-    if (purity) parts.push(`CoA purity ${purity}`);
-    if (result.coaUrl) parts.push(source === "url" ? "Read from URL" : "CoA read from QR");
-    const sourceNoun = source === "url" ? "URL" : "photo";
-    setLlmNote(
-      parts.length > 0
-        ? `${parts.join(" · ")}. Verify before printing.`
-        : `No details could be read from the ${sourceNoun} — enter them manually.`,
-    );
-    setMismatches(result.mismatches);
-    if (result.errors.length > 0) setLlmError(result.errors.join(" "));
+    setNotices(buildNotices(result, source));
   }
 
   async function handleImage(file: File) {
     setBusy(true);
-    setLlmError(null);
-    setLlmNote(null);
-    setMismatches([]);
+    setNotices([]);
     try {
       const dataUrl = await fileToDataUrl(file);
       const result = await autofillFromPhoto(dataUrl, {
@@ -111,11 +98,15 @@ export function App() {
       });
       ingest(result, "photo");
     } catch (err) {
-      setLlmError(
-        err instanceof Error
-          ? err.message
-          : "Image auto-fill failed. Enter the label details manually.",
-      );
+      setNotices([
+        {
+          kind: "error",
+          text:
+            err instanceof Error
+              ? err.message
+              : "Image auto-fill failed. Enter the label details manually.",
+        },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -123,9 +114,7 @@ export function App() {
 
   async function handleUrl(url: string) {
     setBusy(true);
-    setLlmError(null);
-    setLlmNote(null);
-    setMismatches([]);
+    setNotices([]);
     try {
       const result = await autofillFromUrl(url, {
         fetchCoaImage: (u) => fetchCoaImage(u, { rasterizePdf: rasterizePdfToDataUrl }),
@@ -133,11 +122,15 @@ export function App() {
       });
       ingest(result, "url");
     } catch (err) {
-      setLlmError(
-        err instanceof Error
-          ? err.message
-          : "URL auto-fill failed. Enter the label details manually.",
-      );
+      setNotices([
+        {
+          kind: "error",
+          text:
+            err instanceof Error
+              ? err.message
+              : "URL auto-fill failed. Enter the label details manually.",
+        },
+      ]);
     } finally {
       setBusy(false);
     }
@@ -146,61 +139,75 @@ export function App() {
   async function handleCopyImage() {
     const node = labelRef.current;
     if (!node) return;
-    setImageNote(null);
+    setImageNotice(null);
     try {
       const outcome = await exportLabelPng(node, labelPngFilename(label.peptideName));
-      setImageNote(
+      setImageNotice(
         outcome === "copied"
-          ? "Copied label image to the clipboard."
-          : "Clipboard needs HTTPS — downloaded the image instead.",
+          ? { kind: "success", text: "Copied the label image to the clipboard." }
+          : { kind: "info", text: "Clipboard needs HTTPS — downloaded the image instead." },
       );
     } catch (err) {
-      setImageNote(err instanceof Error ? err.message : "Could not create the label image.");
+      setImageNotice({
+        kind: "error",
+        text: err instanceof Error ? err.message : "Could not create the label image.",
+      });
     }
   }
 
   return (
     <main className="app">
       <section className="editor no-print">
-        <h1>Peptide Label Maker</h1>
-        <p className="subtitle">Nelko 40 × 14 mm · 3 ml vials · U-100 dosing</p>
+        <header className="editor-head">
+          <h1>Peptide Label Maker</h1>
+          <p className="subtitle">Nelko 40 × 14 mm · 3 ml vials · U-100 dosing</p>
+        </header>
 
-        <label className="model-picker">
-          LLM endpoint
-          <input
-            type="url"
-            inputMode="url"
-            value={endpointInput}
-            placeholder="http://host:port/v1"
-            onChange={(e) => setEndpointInput(e.target.value)}
-            onBlur={commitEndpoint}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                commitEndpoint();
-              }
-            }}
-          />
-        </label>
+        <section className="settings" aria-label="Auto-fill endpoint and model">
+          <h2 className="settings-title">Auto-fill endpoint &amp; model</h2>
+          <div className="settings-body">
+            <label className="field">
+              LLM endpoint
+              <input
+                type="url"
+                inputMode="url"
+                value={endpointInput}
+                placeholder="http://host:port/v1"
+                onChange={(e) => setEndpointInput(e.target.value)}
+                onBlur={commitEndpoint}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitEndpoint();
+                  }
+                }}
+              />
+            </label>
 
-        <label className="model-picker">
-          Model
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            disabled={models.length === 0}
-          >
-            {models.length === 0 ? (
-              <option value="">{discoverError ? "unavailable" : "discovering…"}</option>
-            ) : (
-              models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name ?? m.id}
-                </option>
-              ))
+            <label className="field">
+              Model
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={models.length === 0}
+              >
+                {models.length === 0 ? (
+                  <option value="">{discoverError ? "unavailable" : "discovering…"}</option>
+                ) : (
+                  models.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name ?? m.id}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
+
+            {discoverError && (
+              <NoticeBanner kind="warning" text={`Couldn't list models: ${discoverError}`} />
             )}
-          </select>
-        </label>
+          </div>
+        </section>
 
         <LabelForm
           value={label}
@@ -210,25 +217,30 @@ export function App() {
           busy={busy}
         />
 
-        {busy && <p className="status">Reading vial photo…</p>}
-        {llmNote && <p className="status">{llmNote}</p>}
-        {mismatches.length > 0 && (
-          <ul className="mismatches">
-            {mismatches.map((m) => (
-              <li key={m}>⚠ {m}</li>
-            ))}
-          </ul>
-        )}
-        {discoverError && <p className="status">Model discovery: {discoverError}</p>}
-        {llmError && <p className="error">{llmError}</p>}
-        {errorMessage && <p className="error">{errorMessage}</p>}
-        {imageNote && <p className="status">{imageNote}</p>}
+        <div className="notices" aria-live="polite">
+          {busy && <NoticeBanner kind="info" text="Reading the image…" />}
+          {notices.map((n, i) => (
+            <NoticeBanner key={`${n.kind}:${i}:${n.text}`} kind={n.kind} text={n.text} />
+          ))}
+          {errorMessage && <NoticeBanner kind="error" text={errorMessage} />}
+          {imageNotice && <NoticeBanner kind={imageNotice.kind} text={imageNotice.text} />}
+        </div>
 
         <div className="actions">
-          <button type="button" onClick={() => window.print()} disabled={!parsed.success}>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => window.print()}
+            disabled={!parsed.success}
+          >
             Print
           </button>
-          <button type="button" onClick={handleCopyImage} disabled={!parsed.success}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={handleCopyImage}
+            disabled={!parsed.success}
+          >
             Copy image
           </button>
         </div>

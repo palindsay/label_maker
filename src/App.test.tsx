@@ -70,7 +70,7 @@ describe("App", () => {
     expect(exportLabelPng).toHaveBeenCalledOnce();
     expect(vi.mocked(exportLabelPng).mock.calls[0]?.[1]).toBe("bpc-157-label.png");
     await waitFor(() =>
-      expect(screen.getByText("Copied label image to the clipboard.")).toBeInTheDocument(),
+      expect(screen.getByText("Copied the label image to the clipboard.")).toBeInTheDocument(),
     );
   });
 
@@ -99,7 +99,7 @@ describe("App", () => {
       expect.objectContaining({ rasterizePdf: expect.any(Function) }),
     );
     await waitFor(() => expect(screen.getByDisplayValue("TB-500")).toBeInTheDocument());
-    expect(screen.getByText(/Read from URL/)).toBeInTheDocument();
+    expect(screen.getByText(/from the CoA URL/)).toBeInTheDocument();
   });
 
   it("uses the CoA vial mg over the dropdown default", async () => {
@@ -220,7 +220,7 @@ describe("App", () => {
     // CoA wins the merge, and the disagreement is surfaced.
     await waitFor(() => expect(screen.getByDisplayValue("10")).toBeInTheDocument());
     expect(screen.getByText(/Vial mg: photo "5" vs CoA "10"/)).toBeInTheDocument();
-    expect(screen.getByText(/CoA purity 99.2%/)).toBeInTheDocument();
+    expect(screen.getByText(/purity 99.2%/)).toBeInTheDocument();
   });
 
   it("shows an error when extraction fails", async () => {

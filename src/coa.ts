@@ -137,5 +137,16 @@ export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise
     }
   }
 
-  throw new CoaError("unsupported-type", `The CoA is an unsupported type (${mime || "unknown"}).`);
+  // A web page is the common miss: a QR/URL points at a CoA *landing page*
+  // rather than the file itself. Say so plainly instead of leaking the MIME.
+  if (mime === "text/html" || mime === "application/xhtml+xml") {
+    throw new CoaError(
+      "unsupported-type",
+      "That link is a web page, not a CoA image or PDF — link directly to the file.",
+    );
+  }
+  throw new CoaError(
+    "unsupported-type",
+    `That link didn't return a CoA image or PDF (it was ${mime || "an unknown type"}).`,
+  );
 }
