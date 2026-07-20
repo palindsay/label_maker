@@ -24,8 +24,13 @@ import {
 import { type Notice, buildNotices } from "./notices";
 import { formatElapsed, stageLabel } from "./progress";
 
-/** Backstop: abort an auto-fill running longer than this (local models are slow but finite). */
-const AUTOFILL_TIMEOUT_MS = 180_000;
+/**
+ * Backstop: abort an auto-fill running longer than this. Generous so a cold
+ * model-load (llama-swap can take ~30–60 s to swap a 27–31B model in) plus a
+ * slow vision pass still completes. With per-model thinking disabled
+ * (see `tuningForModel`) a warm extraction is only a few seconds.
+ */
+const AUTOFILL_TIMEOUT_MS = 300_000;
 
 type AbortReason = "cancel" | "timeout";
 

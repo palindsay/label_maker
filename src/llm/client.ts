@@ -97,6 +97,56 @@ export interface ChatCompletionRequest {
   messages: ChatMessage[];
   temperature: number;
   response_format: { type: "json_object" };
+  /** Bound the answer — extraction returns a tiny JSON, so this caps runtime. */
+  max_tokens: number;
+  /**
+   * llama.cpp / vLLM extension for passing chat-template flags. Used to turn off
+   * the model's reasoning phase (see {@link tuningForModel}). Omitted for models
+   * that don't understand it, to avoid 400s on stricter servers.
+   */
+  chat_template_kwargs?: { enable_thinking: boolean };
+}
+
+/** How many tokens the extraction answer may use — a small JSON needs very few. */
+const EXTRACTION_MAX_TOKENS = 512;
+
+interface ModelTuning {
+  chatTemplateKwargs?: { enable_thinking: boolean };
+  /** Appended to the user prompt (Qwen's `/no_think` soft-switch). */
+  promptSuffix: string;
+  maxTokens: number;
+}
+
+/**
+ * Per-model request tuning to keep local vision extraction FAST. The dominant
+ * cost is the model's "thinking"/reasoning phase, which is unnecessary for a
+ * short JSON extraction and can push a 27B model past any timeout.
+ *
+ * Documented per model family (verified against the LAN endpoint):
+ *  - **Qwen 3.6 (Qwen3 hybrid-thinking)**: disable reasoning with the server
+ *    switch `chat_template_kwargs.enable_thinking=false` AND the portable
+ *    `/no_think` soft-switch in the prompt. Measured >120 s (timeout) → ~4 s.
+ *  - **Gemma 4**: also honors `enable_thinking=false` for a direct answer
+ *    (no `/no_think` — that's a Qwen token). Already fast; keeps it minimal.
+ *  - **Other models**: send no template flags (avoid 400s); just cap the length.
+ */
+export function tuningForModel(modelId: string): ModelTuning {
+  const id = modelId.toLowerCase();
+  if (id.includes("qwen")) {
+    return {
+      chatTemplateKwargs: { enable_thinking: false },
+      promptSuffix: " /no_think",
+      maxTokens: EXTRACTION_MAX_TOKENS,
+    };
+  }
+  if (id.includes("gemma")) {
+    return {
+      chatTemplateKwargs: { enable_thinking: false },
+      promptSuffix: "",
+      maxTokens: EXTRACTION_MAX_TOKENS,
+    };
+  }
+  return { promptSuffix: "", maxTokens: EXTRACTION_MAX_TOKENS };
 }
 
 const SYSTEM_PROMPT =
@@ -119,16 +169,20 @@ const USER_PROMPT =
 
 /** Build the chat-completions request body for a data-URL image. */
 export function buildVisionRequest(imageDataUrl: string, config: LlmConfig): ChatCompletionRequest {
+  const tuning = tuningForModel(config.model);
   return {
     model: config.model,
     temperature: 0,
     response_format: { type: "json_object" },
+    max_tokens: tuning.maxTokens,
+    // Only send the flag when the model understands it (see tuningForModel).
+    ...(tuning.chatTemplateKwargs ? { chat_template_kwargs: tuning.chatTemplateKwargs } : {}),
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
         content: [
-          { type: "text", text: USER_PROMPT },
+          { type: "text", text: USER_PROMPT + tuning.promptSuffix },
           { type: "image_url", image_url: { url: imageDataUrl } },
         ],
       },

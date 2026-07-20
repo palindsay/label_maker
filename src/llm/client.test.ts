@@ -54,6 +54,37 @@ describe("buildVisionRequest", () => {
   });
 });
 
+describe("buildVisionRequest — per-model thinking control", () => {
+  const userText = (body: ReturnType<typeof buildVisionRequest>) => {
+    const user = body.messages.find((m) => m.role === "user");
+    const parts = (user?.content ?? []) as Array<{ type: string; text?: string }>;
+    return parts
+      .filter((p) => p.type === "text")
+      .map((p) => p.text)
+      .join(" ");
+  };
+
+  it("disables Qwen reasoning (enable_thinking + /no_think) and caps tokens", () => {
+    const body = buildVisionRequest(IMG, { baseUrl: "/v1", model: "qwen3.6-27b-mtp" });
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(body.max_tokens).toBeGreaterThan(0);
+    expect(userText(body)).toContain("/no_think");
+  });
+
+  it("disables Gemma reasoning without the Qwen /no_think token", () => {
+    const body = buildVisionRequest(IMG, { baseUrl: "/v1", model: "gemma-4-31b-qat" });
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(userText(body)).not.toContain("/no_think");
+  });
+
+  it("sends no template flags for an unknown model — just a token cap", () => {
+    const body = buildVisionRequest(IMG, { baseUrl: "/v1", model: "llava-1.6-13b" });
+    expect(body.chat_template_kwargs).toBeUndefined();
+    expect(body.max_tokens).toBeGreaterThan(0);
+    expect(userText(body)).not.toContain("/no_think");
+  });
+});
+
 describe("parseExtractionContent", () => {
   it("parses plain JSON", () => {
     expect(parseExtractionContent('{"peptideName":"BPC-157","vialMg":5,"lot":"A1"}')).toEqual({

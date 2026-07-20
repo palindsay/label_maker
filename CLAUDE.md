@@ -131,6 +131,15 @@ App (owns PeptideLabelInput; derives Reconstitution; handles image extraction)
 - Endpoints seen in practice: **llama-swap** (routes by `model` id; unknown id → `404 "no router"`)
   and a plain server exposing a single Qwen build that *does* accept images. A text-only model
   with no mmproj returns `500 "image input is not supported"` → the app's `no-vision` path.
+- **Reasoning/"thinking" is disabled per-model to avoid timeouts.** A hybrid-thinking model
+  spends most of its time reasoning, which is pointless for a short JSON extraction and can blow
+  past the timeout (measured: Qwen 3.6 27B **>120 s → ~2 s** with thinking off). `tuningForModel`
+  (in `llm/client.ts`) selects the mechanism by model id and `buildVisionRequest` applies it:
+  **Qwen 3.6** → `chat_template_kwargs.enable_thinking=false` + the `/no_think` prompt soft-switch;
+  **Gemma 4** → `chat_template_kwargs.enable_thinking=false` (no `/no_think` — that's a Qwen token);
+  **other models** → no template flags (avoid 400s on strict servers). All requests also cap
+  `max_tokens` (`EXTRACTION_MAX_TOKENS`). The auto-fill timeout backstop (`AUTOFILL_TIMEOUT_MS` in
+  `App.tsx`) is 5 min to also cover a cold llama-swap model load.
 - The app **assumes a multimodal model is available** and always offers photo auto-fill. When
   the endpoint can't do vision (no model, no mmproj, unreachable, or a bad response),
   `extractPeptideFromImage` throws a typed `LlmError` (`kind`: `no-vision` | `model-missing` |
