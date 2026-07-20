@@ -131,6 +131,25 @@ describe("autofillFromPhoto", () => {
     expect(result.fields).toEqual({ peptideName: "TB-500", lot: "Z9" });
     expect(result.errors.join(" ")).toMatch(/photo unreadable/);
   });
+
+  it("emits the reading-photo stage when there is no QR", async () => {
+    const onStage = vi.fn();
+    await autofillFromPhoto(PHOTO, deps({ onStage }));
+    expect(onStage.mock.calls.map((c) => c[0])).toEqual(["reading-photo"]);
+  });
+
+  it("emits photo → fetching-coa → reading-coa when a QR resolves", async () => {
+    const onStage = vi.fn();
+    await autofillFromPhoto(
+      PHOTO,
+      deps({ decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"), onStage }),
+    );
+    expect(onStage.mock.calls.map((c) => c[0])).toEqual([
+      "reading-photo",
+      "fetching-coa",
+      "reading-coa",
+    ]);
+  });
 });
 
 const URL_IN = "https://coa.vendor.com/lot/A1.pdf";
@@ -178,5 +197,15 @@ describe("autofillFromUrl", () => {
     expect(result.fields).toEqual({});
     expect(result.coaUrl).toBe(URL_IN);
     expect(result.errors).toEqual([]);
+  });
+
+  it("emits fetching-coa → reading-url stages", async () => {
+    const onStage = vi.fn();
+    await autofillFromUrl(URL_IN, {
+      fetchCoaImage: vi.fn(async () => COA_IMG),
+      extractFromImage: vi.fn(async () => ({ peptideName: "X" })),
+      onStage,
+    });
+    expect(onStage.mock.calls.map((c) => c[0])).toEqual(["fetching-coa", "reading-url"]);
   });
 });

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -48,6 +48,17 @@ afterEach(() => {
 async function renderApp() {
   render(<App />);
   await screen.findByRole("option", { name: "gemma-4-31b" });
+}
+
+/** A manually-controlled promise, to hold an extraction "in flight". */
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe("App", () => {
@@ -180,6 +191,7 @@ describe("App", () => {
       expect(extractPeptideFromImage).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({ baseUrl: "http://rastalinuxai.local:8081/v1" }),
+        expect.any(Function), // signal-bound fetch for cancel/timeout
       ),
     );
   });
@@ -190,6 +202,44 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText(/endpoint down/)).toBeInTheDocument());
     expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
+  });
+
+  it("shows a live progress indicator while auto-filling, then clears it", async () => {
+    const d = deferred<{ peptideName: string; vialMg: number }>();
+    vi.mocked(extractPeptideFromImage).mockReturnValueOnce(d.promise);
+    await renderApp();
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    // Progress is visible while inference runs.
+    expect(await screen.findByText(/Reading the vial photo/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    await act(async () => {
+      d.resolve({ peptideName: "TB-500", vialMg: 10 });
+    });
+
+    await waitFor(() => expect(screen.getByDisplayValue("TB-500")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("cancels a running auto-fill and shows a cancelled notice", async () => {
+    const d = deferred<Record<string, never>>();
+    vi.mocked(extractPeptideFromImage).mockReturnValueOnce(d.promise);
+    await renderApp();
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+    await userEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    // The abort would reject the in-flight extraction; simulate that.
+    await act(async () => {
+      d.reject(new DOMException("aborted", "AbortError"));
+    });
+
+    await waitFor(() => expect(screen.getByText("Auto-fill cancelled.")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
   it("auto-fills fields from a vial photo via the LLM", async () => {

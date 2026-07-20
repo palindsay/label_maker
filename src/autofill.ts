@@ -1,15 +1,28 @@
 import type { ExtractedPeptide } from "./llm/client";
 
 /**
+ * A phase of the auto-fill pipeline, emitted via `onStage` so the UI can show
+ * live progress (local vision inference can take tens of seconds).
+ */
+export type AutofillStage =
+  | "reading-image" // decoding the picked file to a data URL (UI-side)
+  | "reading-photo" // running vision (+ QR decode) on the vial photo
+  | "fetching-coa" // downloading the linked / entered CoA
+  | "reading-coa" // running vision on the fetched CoA
+  | "reading-url"; // running vision on the entered image URL
+
+/**
  * Injected capabilities so the orchestration stays pure and testable:
  *   - `decodeQr`         read a CoA URL out of the photo (or null)
  *   - `extractFromImage` vision extraction of an image data URL
  *   - `fetchCoaImage`    fetch + normalize a CoA URL to an image data URL
+ *   - `onStage`          optional progress callback for each phase
  */
 export interface AutofillDeps {
   decodeQr: (imageDataUrl: string) => Promise<string | null>;
   extractFromImage: (imageDataUrl: string) => Promise<ExtractedPeptide>;
   fetchCoaImage: (url: string) => Promise<string>;
+  onStage?: (stage: AutofillStage) => void;
 }
 
 export interface AutofillResult {
@@ -56,6 +69,7 @@ export async function autofillFromPhoto(
   const mismatches: string[] = [];
 
   // Decode QR and read the vial photo concurrently — they are independent.
+  deps.onStage?.("reading-photo");
   const [qr, vial] = await Promise.allSettled([
     deps.decodeQr(imageDataUrl),
     deps.extractFromImage(imageDataUrl),
@@ -73,7 +87,9 @@ export async function autofillFromPhoto(
   let coaFields: ExtractedPeptide | null = null;
   if (coaUrl) {
     try {
+      deps.onStage?.("fetching-coa");
       const coaImage = await deps.fetchCoaImage(coaUrl);
+      deps.onStage?.("reading-coa");
       coaFields = await deps.extractFromImage(coaImage);
       notes.push(`Read CoA linked from the QR code: ${coaUrl}`);
     } catch (err) {
@@ -104,6 +120,7 @@ export interface UrlAutofillDeps {
   fetchCoaImage: (url: string) => Promise<string>;
   /** Vision extraction of an image data URL. */
   extractFromImage: (imageDataUrl: string) => Promise<ExtractedPeptide>;
+  onStage?: (stage: AutofillStage) => void;
 }
 
 /**
@@ -114,7 +131,9 @@ export interface UrlAutofillDeps {
  */
 export async function autofillFromUrl(url: string, deps: UrlAutofillDeps): Promise<AutofillResult> {
   try {
+    deps.onStage?.("fetching-coa");
     const image = await deps.fetchCoaImage(url);
+    deps.onStage?.("reading-url");
     const fields = await deps.extractFromImage(image);
     return { fields, coaUrl: url, coaFields: fields, mismatches: [], notes: [], errors: [] };
   } catch (err) {
