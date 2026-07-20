@@ -119,13 +119,13 @@ body {
 
 .label-form .row3 {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.5rem;
 }
 
 .label-form .row2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
 }
 
@@ -142,7 +142,7 @@ body {
 
 .label-form .amount-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 0.5rem;
 }
 
@@ -154,6 +154,10 @@ body {
   border-radius: var(--radius);
   font-weight: 400;
   background: var(--surface);
+  /* Fill the grid cell and allow shrinking; a number input's intrinsic size
+     must not force its column past the panel (CSS grid blowout). */
+  width: 100%;
+  min-width: 0;
 }
 
 .label-form .photo {
