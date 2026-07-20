@@ -22,6 +22,14 @@ describe("PEPTIDE_PRESETS", () => {
       expect(preset.name.trim().length, key).toBeGreaterThan(0);
     }
   });
+
+  it("keeps the default dose drawable from the default vial (dose ≤ vial mass)", () => {
+    // doseMcg must not exceed the vial's total peptide (vialMg * 1000), or the
+    // seeded default asks to draw more than the vial holds.
+    for (const [key, preset] of Object.entries(PEPTIDE_PRESETS)) {
+      expect(preset.doseMcg, key).toBeLessThanOrEqual(preset.vialMg * 1000);
+    }
+  });
 });
 
 describe("COMMON_VIAL_MG", () => {

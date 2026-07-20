@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { PeptideLabelInput } from "../label/schema";
+import { PEPTIDE_PRESETS, type PeptideLabelInput } from "../label/schema";
 import { LabelForm } from "./LabelForm";
 
 const base: PeptideLabelInput = {
@@ -59,12 +59,13 @@ describe("LabelForm", () => {
   it("applies a preset (name + dosing) on selection", async () => {
     const { onChange } = renderForm();
     await userEvent.selectOptions(screen.getByLabelText("Preset"), "Semaglutide");
+    const preset = PEPTIDE_PRESETS.Semaglutide;
     expect(onChange).toHaveBeenLastCalledWith({
       ...base,
-      peptideName: "Semaglutide",
-      vialMg: 5,
-      bacWaterMl: 2,
-      doseMcg: 250,
+      peptideName: preset.name,
+      vialMg: preset.vialMg,
+      bacWaterMl: preset.bacWaterMl,
+      doseMcg: preset.doseMcg,
     });
   });
 
