@@ -25,7 +25,10 @@ body {
 
 .app {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  /* minmax(0, …) lets tracks shrink below their content's min size — without it
+     a long <select> option or the zoomed preview blows the column past the
+     viewport (CSS "grid blowout"). */
+  grid-template-columns: 380px minmax(0, 1fr);
   gap: 2rem;
   padding: 2rem;
   min-height: 100vh;
@@ -94,6 +97,10 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
+  /* Fill the column and allow shrinking; a long model-option name must not
+     force the layout wider than the viewport. */
+  width: 100%;
+  min-width: 0;
 }
 
 .label-form {
@@ -403,7 +410,7 @@ button:focus-visible {
 /* --- Responsive: stack the editor over the preview on small screens. --- */
 @media (max-width: 720px) {
   .app {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     padding: 1rem;
     min-height: auto;
