@@ -39,10 +39,16 @@ export type UrlValidation = { ok: true; url: string } | { ok: false; reason: str
  * scheme check keeps `file:`/`data:`/junk out of the fetch path.
  */
 export function validateCoaUrl(raw: string): UrlValidation {
+  const trimmed = raw.trim();
   let parsed: URL;
   try {
-    parsed = new URL(raw);
+    parsed = new URL(trimmed);
   } catch {
+    // A QR often encodes a bare verification code (e.g. "99252_LDWJLKZ7JKFU")
+    // rather than a link — say so instead of a generic "invalid URL".
+    if (/^[\w-]+$/.test(trimmed)) {
+      return { ok: false, reason: "looks like a verification code, not a web link" };
+    }
     return { ok: false, reason: "Not a valid URL" };
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -61,6 +67,8 @@ export interface FetchCoaDeps {
 }
 
 const DEFAULT_MAX_BYTES = 15 * 1024 * 1024;
+/** A CoA link may point at a landing page; follow at most this many hops to the file. */
+const MAX_SCRAPE_HOPS = 1;
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
@@ -72,12 +80,107 @@ function bytesToBase64(bytes: Uint8Array): string {
 }
 
 /**
+ * Best-effort MIME sniff by magic bytes, for when a server sends no or an opaque
+ * (`application/octet-stream`) content-type — common on cheap vendor/S3 hosts.
+ * Returns "" when nothing matches (caller keeps the declared type).
+ */
+function sniffMime(b: Uint8Array): string {
+  if (b.length >= 5 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) {
+    return "application/pdf"; // %PDF
+  }
+  if (b.length >= 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return "image/png"; // \x89PNG
+  }
+  if (b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (b.length >= 6 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) {
+    return "image/gif"; // GIF
+  }
+  if (
+    b.length >= 12 &&
+    b[0] === 0x52 &&
+    b[1] === 0x49 &&
+    b[2] === 0x46 &&
+    b[3] === 0x46 && // RIFF
+    b[8] === 0x57 &&
+    b[9] === 0x45 &&
+    b[10] === 0x42 &&
+    b[11] === 0x50 // WEBP
+  ) {
+    return "image/webp";
+  }
+  return "";
+}
+
+/**
+ * Collect candidate CoA file URLs from an HTML page, resolved absolute against
+ * `baseUrl`. http(s) only, `data:` URIs skipped, best-first: a file extension
+ * and same-origin score up; logos/icons score down. Used to recover the scan
+ * when a QR/URL points at a vendor's verification *page* rather than the file
+ * (e.g. Janoshik's `<img src="./img/<hash>.png">`).
+ */
+export function extractCoaCandidates(html: string, baseUrl: string): string[] {
+  let base: URL;
+  try {
+    base = new URL(baseUrl);
+  } catch {
+    return [];
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const refs: (string | null)[] = [
+    ...Array.from(doc.querySelectorAll("img[src]"), (n) => n.getAttribute("src")),
+    ...Array.from(doc.querySelectorAll("a[href]"), (n) => n.getAttribute("href")),
+  ];
+
+  const seen = new Set<string>();
+  const scored: { url: string; score: number }[] = [];
+  for (const ref of refs) {
+    if (!ref || ref.startsWith("data:")) continue;
+    let abs: URL;
+    try {
+      abs = new URL(ref, base);
+    } catch {
+      continue;
+    }
+    if (abs.protocol !== "http:" && abs.protocol !== "https:") continue;
+    const key = abs.toString();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const path = abs.pathname.toLowerCase();
+    let score = 0;
+    if (/\.(png|jpe?g|webp|gif|pdf)$/.test(path)) score += 3;
+    if (abs.origin === base.origin) score += 2;
+    if (/logo|icon|sprite|favicon/.test(path)) score -= 3;
+    scored.push({ url: key, score });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.map((c) => c.url);
+}
+
+/**
  * Fetch a CoA and return it as an image data URL (rasterizing a PDF if needed).
+ * If the URL resolves to an HTML page (a vendor verification/landing page), the
+ * page is scraped for the embedded CoA image/PDF and that is fetched instead.
  *
  * @throws {CoaError} On invalid URL, unreachable host, bad status, unsupported
  *   content type, or an over-cap payload.
  */
 export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise<string> {
+  return fetchCoaImageAt(rawUrl, deps, { depth: 0, seen: new Set() });
+}
+
+/** Recursion state for the scrape: current hop depth + URLs already fetched. */
+interface ScrapeCtx {
+  depth: number;
+  seen: Set<string>;
+}
+
+async function fetchCoaImageAt(
+  rawUrl: string,
+  deps: FetchCoaDeps,
+  ctx: ScrapeCtx,
+): Promise<string> {
   const validation = validateCoaUrl(rawUrl);
   if (!validation.ok) {
     throw new CoaError("invalid-url", `The URL can't be used: ${validation.reason}.`);
@@ -87,6 +190,7 @@ export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise
   const proxyBase = deps.proxyBase ?? "/coa";
   const maxBytes = deps.maxBytes ?? DEFAULT_MAX_BYTES;
   const url = validation.url;
+  ctx.seen.add(url);
 
   // Try direct; on a network/CORS throw, retry via the same-origin proxy.
   let response: Response;
@@ -114,11 +218,17 @@ export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise
     throw new CoaError("too-large", "The CoA file is too large to process.");
   }
 
-  const mime =
+  const headerMime =
     (response.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase() ?? "";
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.length > maxBytes) {
     throw new CoaError("too-large", "The CoA file is too large to process.");
+  }
+
+  // Trust an explicit image/pdf/html type; only sniff when the server is vague.
+  let mime = headerMime;
+  if (!mime || mime === "application/octet-stream" || mime === "binary/octet-stream") {
+    mime = sniffMime(bytes) || mime;
   }
 
   if (mime.startsWith("image/")) {
@@ -137,9 +247,25 @@ export async function fetchCoaImage(rawUrl: string, deps: FetchCoaDeps): Promise
     }
   }
 
-  // A web page is the common miss: a QR/URL points at a CoA *landing page*
-  // rather than the file itself. Say so plainly instead of leaking the MIME.
+  // A web page is the common QR/URL case: it points at a vendor verification /
+  // landing page, not the file. Scrape it for the embedded CoA and follow that
+  // (bounded by MAX_SCRAPE_HOPS + `seen` to avoid loops); only if nothing
+  // resolves do we report it as a web page.
   if (mime === "text/html" || mime === "application/xhtml+xml") {
+    if (ctx.depth < MAX_SCRAPE_HOPS) {
+      const candidates = extractCoaCandidates(new TextDecoder().decode(bytes), url);
+      for (const candidate of candidates) {
+        if (ctx.seen.has(candidate)) continue;
+        try {
+          return await fetchCoaImageAt(candidate, deps, {
+            depth: ctx.depth + 1,
+            seen: ctx.seen,
+          });
+        } catch {
+          // Try the next candidate; fall through to the clear error below.
+        }
+      }
+    }
     throw new CoaError(
       "unsupported-type",
       "That link is a web page, not a CoA image or PDF — link directly to the file.",
