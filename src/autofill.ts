@@ -47,9 +47,19 @@ function message(reason: unknown, fallback: string): string {
   return reason instanceof Error ? reason.message : fallback;
 }
 
+/**
+ * Treat two cross-check values as equal. Strings compare case-insensitively.
+ * Numbers use a 5% relative tolerance so an assay-vs-label mass gap (e.g. a
+ * model putting a measured 10.31 mg where the label says 10 mg, ~3%) is not
+ * flagged as a disagreement, while a genuine vial-size confusion (nearest
+ * common sizes differ by ≥20%) still is.
+ */
 function fieldsEqual(a: string | number, b: string | number): boolean {
   if (typeof a === "string" && typeof b === "string") {
     return a.trim().toLowerCase() === b.trim().toLowerCase();
+  }
+  if (typeof a === "number" && typeof b === "number") {
+    return Math.abs(a - b) <= Math.max(Math.abs(a), Math.abs(b)) * 0.05;
   }
   return a === b;
 }

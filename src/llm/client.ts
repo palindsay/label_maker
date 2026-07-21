@@ -75,7 +75,14 @@ export class LlmError extends Error {
 /** Fields we attempt to read from an image; all optional. */
 export interface ExtractedPeptide {
   peptideName?: string;
+  /** LABELED / nominal claim — the printed vial size, or a report's stated sample/label amount. */
   vialMg?: number;
+  /**
+   * MEASURED / assayed net peptide content from a CoA results table (e.g. 10.31 mg
+   * where the label claims 10 mg). When present it is the true vial content and
+   * drives dosing; absent on a plain vial label.
+   */
+  measuredMg?: number;
   lot?: string;
   /** Brand / vendor / manufacturer — printed on a vial, or a CoA's "Manufacturer"/"Client". */
   manufacturer?: string;
@@ -158,9 +165,11 @@ const USER_PROMPT =
   "Certificate of Analysis / lab test report: " +
   '`peptideName` (string, the peptide\'s name, e.g. "BPC-157" or "Ipamorelin"; on a report ' +
   "prefer the full name from the results table over an abbreviated sample name), " +
-  "`vialMg` (number, the total milligrams of peptide in the vial — on a vial label the printed " +
-  'amount like "10mg"; on a Certificate of Analysis the peptide content / quantity / net peptide / ' +
-  'label claim / mg per vial, e.g. 10 from "10 mg". Prefer the CoA amount when reading a report), ' +
+  '`vialMg` (number, the LABEL CLAIM / nominal amount — the printed vial size like "10mg", or a ' +
+  'report\'s stated label/sample amount, e.g. 10 from "10 mg" or a sample named "ipa 10mg"), ' +
+  "`measuredMg` (number, the MEASURED / assayed net peptide content from the report's results or " +
+  'analysis table, e.g. 10.31 from a results row like "Ipamorelin 10.31 mg"; omit on a plain vial ' +
+  "label and whenever no measured amount is reported), " +
   "`manufacturer` (string, the brand / vendor / manufacturer / supplier; on a report use the " +
   '"Manufacturer" field, or "Client" if there is no separate manufacturer, e.g. "utherpeptide.com"), ' +
   '`lot` (string, the lot or batch code, e.g. "IP10-0106"), ' +
@@ -207,6 +216,7 @@ const rawSchema = z
   .object({
     peptideName: z.string().trim().min(1).optional(),
     vialMg: z.union([z.number(), z.string()]).optional(),
+    measuredMg: z.union([z.number(), z.string()]).optional(),
     lot: z.string().trim().min(1).optional(),
     manufacturer: z.string().trim().min(1).optional(),
     purity: z.union([z.string(), z.number()]).optional(),
@@ -251,6 +261,8 @@ export function parseExtractionContent(content: string): ExtractedPeptide {
   if (parsed.data.manufacturer) result.manufacturer = parsed.data.manufacturer;
   const mg = coerceMg(parsed.data.vialMg);
   if (mg !== undefined) result.vialMg = mg;
+  const measured = coerceMg(parsed.data.measuredMg);
+  if (measured !== undefined) result.measuredMg = measured;
   const purity = coercePurity(parsed.data.purity);
   if (purity !== undefined) result.purity = purity;
   return result;

@@ -52,6 +52,21 @@ describe("buildVisionRequest", () => {
     // CoAs phrase the amount as content/quantity/label-claim, not "10mg".
     expect(prompt).toMatch(/content|quantity|label claim|per vial/);
   });
+
+  it("separates the measured/assayed content from the label claim", () => {
+    const body = buildVisionRequest(IMG, CFG);
+    const prompt = body.messages
+      .flatMap((m) =>
+        typeof m.content === "string"
+          ? [m.content]
+          : m.content.filter((p) => p.type === "text").map((p) => (p as { text: string }).text),
+      )
+      .join(" ")
+      .toLowerCase();
+    expect(prompt).toContain("measuredmg");
+    expect(prompt).toMatch(/measured|assayed/);
+    expect(prompt).toMatch(/label claim|nominal/);
+  });
 });
 
 describe("buildVisionRequest — per-model thinking control", () => {
@@ -109,6 +124,21 @@ describe("parseExtractionContent", () => {
 
   it("drops fields with the wrong type", () => {
     expect(parseExtractionContent('{"peptideName":123,"vialMg":"nope"}')).toEqual({});
+  });
+
+  it("reads measuredMg (assay content) separately from vialMg (label claim)", () => {
+    expect(
+      parseExtractionContent('{"peptideName":"Ipamorelin","vialMg":10,"measuredMg":"10.31 mg"}'),
+    ).toEqual({ peptideName: "Ipamorelin", vialMg: 10, measuredMg: 10.31 });
+  });
+
+  it("coerces a numeric measuredMg and omits it when absent", () => {
+    expect(parseExtractionContent('{"measuredMg":10.31}')).toEqual({ measuredMg: 10.31 });
+    expect(parseExtractionContent('{"vialMg":5}')).toEqual({ vialMg: 5 });
+  });
+
+  it("drops a non-numeric measuredMg but keeps the rest", () => {
+    expect(parseExtractionContent('{"vialMg":5,"measuredMg":"n/a"}')).toEqual({ vialMg: 5 });
   });
 
   it("reads purity, appending % to a bare number", () => {

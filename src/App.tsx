@@ -7,6 +7,7 @@ import {
 } from "./autofill";
 import { decodeQrFromDataUrl, exportLabelPng, rasterizePdfToDataUrl } from "./browser";
 import { fetchCoaImage } from "./coa";
+import { type DosingBasis, DosingSummary } from "./components/DosingSummary";
 import { LabelForm } from "./components/LabelForm";
 import { LabelPreview } from "./components/LabelPreview";
 import { NoticeBanner } from "./components/NoticeBanner";
@@ -73,6 +74,8 @@ export function App() {
   // one for the image export, so the two flows don't clobber each other.
   const [notices, setNotices] = useState<Notice[]>([]);
   const [imageNotice, setImageNotice] = useState<Notice | null>(null);
+  // Screen-only CoA provenance (measured mass driving dosing, purity, label claim).
+  const [dosingBasis, setDosingBasis] = useState<DosingBasis | null>(null);
   const labelRef = useRef<HTMLDivElement>(null);
 
   // Tick the elapsed-time readout while an auto-fill is running.
@@ -120,12 +123,36 @@ export function App() {
 
   /** Merge an autofill result into the form and surface typed notices. */
   function ingest(result: AutofillResult, source: "photo" | "url") {
-    // `purity` isn't a label field — surface it in the note, not the form.
-    const { purity: _purity, ...labelFields } = result.fields;
-    if (Object.keys(labelFields).length > 0) {
-      setLabel((prev) => ({ ...prev, ...labelFields }));
+    // `measuredMg` and `purity` aren't label fields — keep them off the form and
+    // surface them in the note + dosing panel instead.
+    const { purity, measuredMg, ...labelFields } = result.fields;
+    // The assayed content is the true vial mass, so it drives dosing (and print).
+    const effectiveMg = measuredMg ?? labelFields.vialMg;
+    if (Object.keys(labelFields).length > 0 || effectiveMg !== undefined) {
+      setLabel((prev) => ({
+        ...prev,
+        ...labelFields,
+        ...(effectiveMg !== undefined ? { vialMg: effectiveMg } : {}),
+      }));
     }
+    // Screen-only provenance: what the CoA measured, its label claim, and purity.
+    setDosingBasis(
+      measuredMg !== undefined || purity !== undefined
+        ? {
+            ...(measuredMg !== undefined ? { measuredMg } : {}),
+            ...(labelFields.vialMg !== undefined ? { labeledMg: labelFields.vialMg } : {}),
+            ...(purity !== undefined ? { purity } : {}),
+          }
+        : null,
+    );
     setNotices(buildNotices(result, source));
+  }
+
+  /** Wrap form edits so a manual change to the vial mass clears the stale
+   *  "measured drives dosing" provenance (it no longer describes the input). */
+  function handleLabelChange(next: PeptideLabelInput) {
+    if (next.vialMg !== label.vialMg) setDosingBasis(null);
+    setLabel(next);
   }
 
   /** Begin an auto-fill run: arm the abort controller/timer and return the
@@ -135,6 +162,7 @@ export function App() {
     abortRef.current = controller;
     abortReasonRef.current = null;
     setNotices([]);
+    setDosingBasis(null);
     startedAtRef.current = Date.now();
     setElapsedMs(0);
     setStage(initial);
@@ -227,7 +255,7 @@ export function App() {
 
   return (
     <main className="app">
-      <section className="editor no-print">
+      <section className="editor no-print" aria-label="Label editor">
         <header className="editor-head">
           <h1>Peptide Label Maker</h1>
           <p className="subtitle">Nelko 40 × 14 mm · 3 ml vials · U-100 dosing</p>
@@ -290,7 +318,7 @@ export function App() {
 
         <LabelForm
           value={label}
-          onChange={setLabel}
+          onChange={handleLabelChange}
           onImageSelected={handleImage}
           onUrlSubmit={handleUrl}
           busy={busy}
@@ -303,6 +331,8 @@ export function App() {
           {errorMessage && <NoticeBanner kind="error" text={errorMessage} />}
           {imageNotice && <NoticeBanner kind={imageNotice.kind} text={imageNotice.text} />}
         </div>
+
+        <DosingSummary recon={recon} basis={dosingBasis} />
 
         <div className="actions">
           <button
@@ -324,7 +354,7 @@ export function App() {
         </div>
       </section>
 
-      <section className="stage">
+      <section className="stage" aria-label="Label preview">
         <div className="preview-frame">
           <LabelPreview label={label} recon={recon} ref={labelRef} />
         </div>

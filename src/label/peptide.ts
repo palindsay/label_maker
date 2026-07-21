@@ -91,3 +91,8 @@ export function formatConcentration(mcgPerMl: number): string {
 export function formatUnits(units: number): string {
   return `${trim(units, 1)} IU`;
 }
+
+/** Draw volume in mL, e.g. `formatMl(0.15)` -> "0.15 mL", `formatMl(0.024)` -> "0.024 mL". */
+export function formatMl(ml: number): string {
+  return `${trim(ml, 3)} mL`;
+}

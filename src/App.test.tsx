@@ -310,4 +310,50 @@ describe("App", () => {
     );
     expect(screen.getByRole("button", { name: "Print" })).toBeEnabled();
   });
+
+  it("uses the CoA measured mass to drive dosing (and the printed amount)", async () => {
+    vi.mocked(extractPeptideFromImage).mockResolvedValueOnce({
+      peptideName: "Ipamorelin",
+      vialMg: 10,
+      measuredMg: 10.31,
+    });
+    await renderApp();
+
+    await userEvent.type(
+      screen.getByLabelText("CoA / image URL → auto-fill"),
+      "https://coa.vendor.com/a.pdf",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Fetch" }));
+
+    // The measured 10.31 mg (not the 10 mg label claim) becomes the vial mass.
+    await waitFor(() => expect(screen.getByLabelText("Vial mg")).toHaveValue(10.31));
+    const basis = screen.getByText(/Measured 10\.31 mg drives dosing/);
+    expect(basis.textContent).toMatch(/label claim 10 mg/);
+  });
+
+  it("drives dosing from the CoA measured mass without flagging a labeled-vs-measured mismatch", async () => {
+    vi.mocked(decodeQrFromDataUrl).mockResolvedValueOnce("https://coa.vendor.com/a.pdf");
+    vi.mocked(extractPeptideFromImage)
+      .mockResolvedValueOnce({ peptideName: "Ipamorelin", vialMg: 10 }) // vial photo (labeled)
+      .mockResolvedValueOnce({
+        peptideName: "Ipamorelin",
+        vialMg: 10,
+        measuredMg: 10.31,
+        purity: "99.8%",
+      }); // CoA (labeled 10 + measured 10.31)
+    await renderApp();
+    const file = new File(["x"], "vial.png", { type: "image/png" });
+
+    await userEvent.upload(screen.getByLabelText("Vial photo → auto-fill"), file);
+
+    await waitFor(() => expect(screen.getByLabelText("Vial mg")).toHaveValue(10.31));
+    expect(screen.queryByText(/vs CoA/)).toBeNull();
+    expect(screen.getByText(/Measured 10\.31 mg drives dosing/)).toBeInTheDocument();
+  });
+
+  it("shows an on-screen dosing summary that is not part of the printed label", async () => {
+    await renderApp();
+    const doses = screen.getByText(/doses\/vial/);
+    expect(doses.closest(".dosing-summary")?.className).toContain("no-print");
+  });
 });

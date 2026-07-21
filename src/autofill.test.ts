@@ -102,6 +102,44 @@ describe("autofillFromPhoto", () => {
     expect(result.mismatches[0]).toMatch(/5.*10/);
   });
 
+  it("carries the CoA measured mass through the merge without a mismatch", async () => {
+    const d = deps({
+      decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),
+      extractFromImage: vi
+        .fn()
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", vialMg: 10 })
+        .mockResolvedValueOnce({
+          peptideName: "Ipamorelin",
+          vialMg: 10,
+          measuredMg: 10.31,
+          purity: "99.8%",
+        }),
+    });
+
+    const result = await autofillFromPhoto(PHOTO, d);
+
+    expect(result.fields.measuredMg).toBe(10.31);
+    expect(result.fields.vialMg).toBe(10); // labeled claim preserved (measured is separate)
+    expect(result.mismatches).toEqual([]);
+  });
+
+  it("treats a small labeled-vs-measured numeric difference as equal (no false mismatch)", async () => {
+    // If a model puts the assay (10.31) into the CoA's vialMg, the ~3% gap vs the
+    // photo's labeled 10 must not be flagged as a disagreement.
+    const d = deps({
+      decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),
+      extractFromImage: vi
+        .fn()
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", vialMg: 10 })
+        .mockResolvedValueOnce({ peptideName: "Ipamorelin", vialMg: 10.31 }),
+    });
+
+    const result = await autofillFromPhoto(PHOTO, d);
+
+    expect(result.mismatches).toEqual([]);
+    expect(result.fields.vialMg).toBe(10.31); // CoA still wins the merge
+  });
+
   it("keeps vial fields and records an error when the CoA fetch fails", async () => {
     const d = deps({
       decodeQr: vi.fn(async () => "https://coa.vendor.com/a.pdf"),

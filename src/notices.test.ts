@@ -27,6 +27,22 @@ describe("buildNotices", () => {
     expect(notice?.text).not.toContain("vialMg");
   });
 
+  it("surfaces the measured mass and purity without listing them as filled fields", () => {
+    const [notice] = buildNotices(
+      result({
+        fields: { peptideName: "Ipamorelin", vialMg: 10, measuredMg: 10.31, purity: "99.8%" },
+        coaFields: { peptideName: "Ipamorelin", vialMg: 10, measuredMg: 10.31, purity: "99.8%" },
+      }),
+      "url",
+    );
+    expect(notice?.kind).toBe("success");
+    expect(notice?.text).toContain("measured 10.31 mg");
+    expect(notice?.text).toContain("purity 99.8%");
+    // measuredMg is not a form field — it must not appear in the "Filled …" list or as a raw key.
+    expect(notice?.text).not.toContain("measuredMg");
+    expect(notice?.text).toContain("Filled Peptide name, Vial mg");
+  });
+
   it("does NOT claim 'from the CoA' when the CoA was not read", () => {
     // Photo filled the fields; the QR CoA fetch failed → coaFields stays null.
     const notices = buildNotices(

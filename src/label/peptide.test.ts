@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatConcentration, formatMcg, formatMg, formatUnits, reconstitution } from "./peptide";
+import {
+  formatConcentration,
+  formatMcg,
+  formatMg,
+  formatMl,
+  formatUnits,
+  reconstitution,
+} from "./peptide";
 
 describe("reconstitution", () => {
   it("computes the canonical 5mg / 2mL / 250mcg case", () => {
@@ -53,5 +60,12 @@ describe("formatters", () => {
     expect(formatUnits(10)).toBe("10 IU");
     expect(formatUnits(12.5)).toBe("12.5 IU");
     expect(formatUnits(7.34)).toBe("7.3 IU");
+  });
+
+  it("formatMl renders mL with at most three decimals", () => {
+    expect(formatMl(0.1)).toBe("0.1 mL");
+    expect(formatMl(0.15)).toBe("0.15 mL");
+    expect(formatMl(0.024)).toBe("0.024 mL");
+    expect(formatMl(1)).toBe("1 mL");
   });
 });

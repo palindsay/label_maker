@@ -1,4 +1,5 @@
 import type { AutofillResult } from "./autofill";
+import { formatMg } from "./label/peptide";
 
 /** Severity of a user-facing notification banner. */
 export type NoticeKind = "success" | "warning" | "error" | "info";
@@ -30,14 +31,17 @@ const FIELD_LABELS: Record<string, string> = {
  *    another source (e.g. the photo), and only an *error* when nothing landed.
  */
 export function buildNotices(result: AutofillResult, source: "photo" | "url"): Notice[] {
-  const { purity, ...labelFields } = result.fields;
+  // `measuredMg` and `purity` are CoA facts surfaced in the note, not form fields.
+  const { purity, measuredMg, ...labelFields } = result.fields;
   const filledLabels = Object.keys(labelFields).map((k) => FIELD_LABELS[k] ?? k);
-  const filledSomething = filledLabels.length > 0 || purity !== undefined;
+  const filledSomething =
+    filledLabels.length > 0 || measuredMg !== undefined || purity !== undefined;
   const notices: Notice[] = [];
 
   if (filledSomething) {
     const bits: string[] = [];
     if (filledLabels.length > 0) bits.push(`Filled ${filledLabels.join(", ")}`);
+    if (measuredMg !== undefined) bits.push(`measured ${formatMg(measuredMg)}`);
     if (purity !== undefined) bits.push(`purity ${purity}`);
     // Only credit the CoA when one was genuinely read and merged.
     const from = result.coaFields
