@@ -32,6 +32,9 @@ body {
   gap: 2rem;
   padding: 2rem;
   min-height: 100vh;
+  /* Cap on ultra-wide displays so the preview column doesn't strand the label. */
+  max-width: 1500px;
+  margin-inline: auto;
 }
 
 /* The editor reads as a card sitting on the page surface. */
@@ -66,7 +69,8 @@ body {
   padding: 0.75rem;
 }
 
-.settings-title {
+.settings-title,
+.dosing-title {
   margin: 0 0 0.6rem;
   font-size: 0.72rem;
   font-weight: 700;
@@ -235,6 +239,40 @@ body {
   border-color: #f2c2c8;
 }
 
+/* --- On-screen dosing summary (never printed) --- */
+.dosing-summary {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  padding: 0.75rem;
+}
+
+.dosing-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.dosing-basis {
+  margin: 0.55rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.dosing-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 /* --- Auto-fill progress --- */
 .progress {
   display: flex;
@@ -370,12 +408,25 @@ button:hover:not(:disabled) {
 }
 
 button:disabled {
-  background: #aab4c2;
+  background: #d5dae1;
+  color: #566070; /* ~4.4:1 on the disabled fill — legible, not WCAG-exempt-faint */
+  border-color: transparent;
   cursor: not-allowed;
 }
 
 .actions .btn {
   flex: 1 1 auto;
+}
+
+/* Print is the primary action — make the brand fill explicit, not incidental. */
+.btn-primary {
+  background: var(--brand);
+  color: #fff;
+  border-color: transparent;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--brand-ink);
 }
 
 .btn-secondary {
@@ -390,7 +441,7 @@ button:disabled {
 
 .btn-secondary:disabled {
   background: var(--surface);
-  color: #9aa3af;
+  color: #6b7280; /* ~5:1 on white */
   border-color: var(--border);
 }
 
@@ -409,6 +460,9 @@ button:focus-visible {
   padding: 3rem;
   background: #f4f4f4;
   border-radius: 8px;
+  /* Safety valve: if the zoomed label exceeds a narrow column, scroll rather
+     than paint outside the box. */
+  overflow-x: auto;
 }
 
 /* Screen-only magnification so the tiny label is legible; reset for print.
@@ -523,12 +577,16 @@ button:focus-visible {
   }
 }
 
-/* --- Responsive: stack the editor over the preview on small screens. --- */
-@media (max-width: 720px) {
+/* --- Responsive: single column + touch sizing for phones and tablets. --- */
+/* ≤900px covers iPad portrait (744–834 CSS px) and all phones: stack + enlarge. */
+@media (max-width: 900px) {
   .app {
     grid-template-columns: minmax(0, 1fr);
     gap: 1rem;
     padding: 1rem;
+    /* Respect notch / rounded-corner safe areas (viewport-fit=cover). */
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
     min-height: auto;
   }
 
@@ -541,30 +599,37 @@ button:focus-visible {
   }
 
   .stage {
-    padding: 2rem 0.5rem;
-    /* `zoom` reserves layout space, so no clipping is needed; allow a scroll
-       as a safety valve if the enlarged label exceeds a very narrow viewport. */
-    overflow-x: auto;
+    padding: 1.5rem 0.5rem;
   }
 
   .preview-frame {
-    zoom: 2.1;
+    zoom: 2.6;
   }
 
   /* Comfortable tap targets; 16px inputs stop iOS from zooming on focus. */
   .label-form input,
   .label-form select,
   .field input,
-  .field select {
-    padding: 0.6rem 0.55rem;
+  .field select,
+  .label-form .url-row button {
+    padding: 0.6rem 0.6rem;
     font-size: 16px;
+    min-height: 44px;
   }
 
-  /* Stack the action buttons full-width; keep the inline URL Fetch button inline. */
+  /* Full-width primary actions with a comfortable hit target. */
   .actions .btn {
     width: 100%;
+    min-height: 44px;
     padding: 0.8rem 1rem;
     font-size: 1rem;
+  }
+}
+
+/* Phones: shrink the magnifier so the label fits without horizontal scroll. */
+@media (max-width: 600px) {
+  .preview-frame {
+    zoom: 2.2;
   }
 }
 
@@ -574,7 +639,8 @@ button:focus-visible {
   }
 
   .label-form .row2,
-  .label-form .amount-row {
+  .label-form .amount-row,
+  .dosing-rows {
     grid-template-columns: 1fr;
   }
 }
